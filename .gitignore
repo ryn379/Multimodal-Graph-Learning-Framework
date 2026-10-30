@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs and local environment files
+*.log
+.env
+.env.*
+!.env.example
+
+# Generated datasets and machine-learning artifacts
+processed/
+checkpoints/
+figures/
