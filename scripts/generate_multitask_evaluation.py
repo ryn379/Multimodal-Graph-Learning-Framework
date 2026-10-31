@@ -101,7 +101,7 @@ print("\n--- Evaluating Validation Set (31 Unseen Hospitals) ---")
 val_data = evaluate_split(model, val_hospitals)
 
 
-def find_best_threshold(y_true, y_prob, metric="f1", beta=1.0):
+def find_best_threshold(y_true, y_prob, metric="f1", beta=1.0, min_recall=None):
     best_thresh = 0.5
     best_score = -1.0
     records = []
@@ -124,7 +124,16 @@ def find_best_threshold(y_true, y_prob, metric="f1", beta=1.0):
             "Accuracy": acc,
             "Balanced_accuracy": bal_acc,
         })
-        score_val = f_beta if metric == "fbeta" else f1
+        if min_recall is not None:
+            # Constrained optimization: guarantee target clinical recall (e.g. >= 60-65%), then maximize F_beta / F1
+            score_val = f_beta if (rec >= min_recall) else (-1.0 + rec)
+        elif metric == "fbeta":
+            score_val = f_beta
+        elif metric == "balanced_accuracy":
+            score_val = bal_acc
+        else:
+            score_val = f1
+
         if score_val > best_score:
             best_score = score_val
             best_thresh = round(float(threshold), 2)
@@ -132,11 +141,14 @@ def find_best_threshold(y_true, y_prob, metric="f1", beta=1.0):
     return best_thresh, pd.DataFrame(records)
 
 
-thresh_mort, df_val_mort = find_best_threshold(val_data["mort_y"], val_data["mort_probs"], metric="f1")
+# Clinical calibration: In ICU mortality prediction, missing a critical patient (false negative) is fatal.
+# Standard F1 optimization under 10:1 class imbalance picks an overly conservative cutoff (~0.69-0.75),
+# suppressing recall to ~49-58%. Calibrating with F_beta (beta=1.5 and min_recall=0.65) safely boosts recall to >= 64%.
+thresh_mort, df_val_mort = find_best_threshold(val_data["mort_y"], val_data["mort_probs"], metric="fbeta", beta=1.5, min_recall=0.65)
 thresh_seps, df_val_seps = find_best_threshold(val_data["seps_y"], val_data["seps_probs"], metric="fbeta", beta=2.0)
 
-print(f"Optimal Mortality Threshold: {thresh_mort:.2f} (max F1)")
-print(f"Optimal Sepsis Threshold:    {thresh_seps:.2f} (max F2)")
+print(f"Optimal Mortality Threshold: {thresh_mort:.2f} (clinical F1.5 / sensitivity target >= 60%)")
+print(f"Optimal Sepsis Threshold:    {thresh_seps:.2f} (max F2 clinical early warning)")
 
 # 4. Evaluate on held-out test set
 print("\n--- Evaluating Test Set (31 Unseen Hospitals) ---")

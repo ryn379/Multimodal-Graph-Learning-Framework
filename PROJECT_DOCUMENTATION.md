@@ -1,4 +1,4 @@
-# Project Hail Minor: Comprehensive Technical Architecture & Engineering Documentation
+# Multimodal Graph Based Framework: Comprehensive Technical Architecture & Engineering Documentation
 
 A rigorous, end-to-end technical reference for **Project Hail Minor**, an ICU clinical decision support and patient outcome prediction platform built upon the **eICU Collaborative Research Database** (v2.0).
 
@@ -7,13 +7,16 @@ A rigorous, end-to-end technical reference for **Project Hail Minor**, an ICU cl
 ## 1. Executive Summary & Clinical Problem Formulation
 
 ### 1.1. Clinical Context
+
 Critically ill patients in Intensive Care Units (ICUs) experience high rates of physiological volatility. Timely clinical interventions require predictive tools capable of synthesizing dynamic, multi-rate physiological time series (vital signs, laboratory tests, drug titrations, organ support therapies) alongside rich static patient histories (chronic comorbidities, demographics, admission severity scoring).
 
 **Project Hail Minor** addresses this challenge by framing ICU risk prediction through a **multimodal, relational graph neural network (GNN)** paradigm. Rather than treating patient records as isolated vectors, this architecture models both:
+
 1. **Intra-patient multi-modal dynamics**: Integrating irregular temporal trajectories with high-dimensional static baselines.
 2. **Inter-patient relational topology**: Leveraging clinical similarity across patients treated within the same healthcare facility to regularize and enrich representations.
 
 ### 1.2. Primary Clinical Objectives
+
 The platform is optimized for two high-stakes clinical prediction targets and an auxiliary self-supervised task:
 
 1. **In-Hospital Mortality Prediction (Task 1)**:
@@ -31,26 +34,28 @@ The platform is optimized for two high-stakes clinical prediction targets and an
 
 ## 2. Technology Stack & Hardware Infrastructure
 
-| Category | Technology | Version / Specification | Exact Function in Project |
-| :--- | :--- | :--- | :--- |
-| **Language** | Python | 3.13 / 3.14 | Core language for modular scripts, training pipelines, and notebooks |
-| **Deep Learning** | PyTorch | $\ge 2.14$ (`torch`, `torch.nn`, `torch.sparse`) | Implementation of LSTMs, autoencoders, multi-head attention, sparse GCNs |
-| **Hardware Acceleration** | Apple Silicon MPS & NVIDIA CUDA | MPS (`torch.backends.mps`) / CUDA | High-throughput sparse tensor matrix multiplications and graph convolutions |
-| **Numerical Processing** | NumPy | $\ge 2.5.0$ | High-dimensional array manipulation and storage (`.npy`, `.npz`) |
-| **Tabular Data / ETL** | Pandas, PyArrow | Latest | Multi-table joins, parquet feature extraction, column coercion |
-| **Sparse Graph Math** | SciPy Sparse | `scipy.sparse` (`coo_matrix`, `csr_matrix`) | Constructing and storing $153,831 \times 153,831$ adjacency matrices |
-| **Graph Construction** | Scikit-Learn | `sklearn.neighbors.NearestNeighbors` | High-dimensional cosine $k$-NN neighbor search and index mapping |
-| **Metrics & Validation** | Scikit-Learn | `sklearn.metrics` | AUROC, AUPRC, precision-recall curve, $F_1$, $F_2$, confusion matrices |
-| **Graph Visualization** | NetworkX & Matplotlib | `networkx`, `matplotlib` | Subgraph sampling, degree distribution, and patient cluster topology plots |
+| Category                  | Technology                      | Version / Specification                          | Exact Function in Project                                                   |
+| :------------------------ | :------------------------------ | :----------------------------------------------- | :-------------------------------------------------------------------------- |
+| **Language**              | Python                          | 3.13 / 3.14                                      | Core language for modular scripts, training pipelines, and notebooks        |
+| **Deep Learning**         | PyTorch                         | $\ge 2.14$ (`torch`, `torch.nn`, `torch.sparse`) | Implementation of LSTMs, autoencoders, multi-head attention, sparse GCNs    |
+| **Hardware Acceleration** | Apple Silicon MPS & NVIDIA CUDA | MPS (`torch.backends.mps`) / CUDA                | High-throughput sparse tensor matrix multiplications and graph convolutions |
+| **Numerical Processing**  | NumPy                           | $\ge 2.5.0$                                      | High-dimensional array manipulation and storage (`.npy`, `.npz`)            |
+| **Tabular Data / ETL**    | Pandas, PyArrow                 | Latest                                           | Multi-table joins, parquet feature extraction, column coercion              |
+| **Sparse Graph Math**     | SciPy Sparse                    | `scipy.sparse` (`coo_matrix`, `csr_matrix`)      | Constructing and storing $153,831 \times 153,831$ adjacency matrices        |
+| **Graph Construction**    | Scikit-Learn                    | `sklearn.neighbors.NearestNeighbors`             | High-dimensional cosine $k$-NN neighbor search and index mapping            |
+| **Metrics & Validation**  | Scikit-Learn                    | `sklearn.metrics`                                | AUROC, AUPRC, precision-recall curve, $F_1$, $F_2$, confusion matrices      |
+| **Graph Visualization**   | NetworkX & Matplotlib           | `networkx`, `matplotlib`                         | Subgraph sampling, degree distribution, and patient cluster topology plots  |
 
 ---
 
 ## 3. Cohort Design & Leakage Prevention Protocol
 
 ### 3.1. Hospital-Level Partitioning
+
 Clinical practice patterns, physician treatment thresholds, laboratory test panels, and patient demographics vary dramatically across individual hospitals. Standard random patient-level splits lead to **practice-pattern leakage**, causing models to memorize institutional artifacts rather than generalizable pathophysiology.
 
 Project Hail Minor enforces a strict **Hospital-Level Split** across all 207 hospitals in the cohort:
+
 - **Total Patient Cohort**: 200,860 ICU stays across 207 hospitals.
 - **Split Distribution (`processed/hospital_split.json`)**:
   - **Training Set**: 145 hospitals (143,419 patients; 12,640 mortality positives [8.81%]; 23,759 sepsis positives [16.57%]).
@@ -58,7 +63,9 @@ Project Hail Minor enforces a strict **Hospital-Level Split** across all 207 hos
   - **Testing Set**: 31 unseen hospitals (27,360 patients; 2,437 mortality positives [8.91%]; 3,809 sepsis positives [13.92%]).
 
 ### 3.2. Intra-Hospital Patient Graph Isolation
+
 When constructing patient similarity graphs for the Graph Convolutional Network:
+
 - Edges are formed **exclusively between patients admitted to the exact same hospital**.
 - The cross-hospital adjacency is strictly zero: $A_{u, v} = 0 \quad \forall u \in \mathcal{H}_i, v \in \mathcal{H}_j \quad (i \ne j)$.
 - This ensures the graph adjacency matrix is purely **block-diagonal**, preventing relational information from leaking across institutions.
@@ -129,6 +136,7 @@ flowchart TD
 ## 5. Mathematical Formulations & Component Specifications
 
 ### 5.1. Stage 1: Temporal Encoder (LSTM)
+
 - **Time Discretization**: First 48 hours of ICU admission partitioned into $T = 12$ uniform 4-hour bins ($t \in \{0, 1, \dots, 11\}$).
 - **Input Feature Dimension**: $C = 46$ physiological features (20 lab tests, 10 continuous infusion drug rates, 11 treatment flags, 5 medications).
 - **Missingness Indicator Formulation**:
@@ -144,22 +152,28 @@ flowchart TD
   $$h_{\text{temp}} = \text{ReLU}(W_p h_{\text{last}} + b_p) \in \mathbb{R}^{64}$$
 
 ### 5.2. Stage 2: Tabular Denoising Autoencoder (DAE)
+
 - **Input Dimension**: $x_{\text{tab}} \in \mathbb{R}^{67}$ (standardized continuous APACHE variables + binary categorical flags).
 - **Stochastic Corruption**: Gaussian perturbation applied during training mode only:
   $$\tilde{x}_{\text{tab}} = x_{\text{tab}} + \epsilon, \quad \epsilon \sim \mathcal{N}(0, 0.1^2 \cdot I_{67})$$
 - **Encoder**:
-  $$\begin{aligned}
+  $$
+  \begin{aligned}
   z_1 &= \text{ReLU}(\text{BatchNorm1d}(W_{e1} \tilde{x}_{\text{tab}} + b_{e1})) \in \mathbb{R}^{67} \\
   z_2 &= \text{ReLU}(W_{e2} z_1 + b_{e2}) \in \mathbb{R}^{128} \\
   h_{\text{tab}} &= W_{e3} z_2 + b_{e3} \in \mathbb{R}^{64}
-  \end{aligned}$$
+  \end{aligned}
+  $$
 - **Decoder**:
-  $$\begin{aligned}
+  $$
+  \begin{aligned}
   d_1 &= \text{ReLU}(W_{d1} h_{\text{tab}} + b_{d1}) \in \mathbb{R}^{128} \\
   \hat{x}_{\text{tab}} &= W_{d2} d_1 + b_{d2} \in \mathbb{R}^{67}
-  \end{aligned}$$
+  \end{aligned}
+  $$
 
 ### 5.3. Stage 3: Cross-Modal Attention Fusion
+
 - **Modality Stacking**: The representations $h_{\text{temp}}$ and $h_{\text{tab}}$ are stacked into a sequence of length 2:
   $$\mathbf{Z}^{(0)} = \begin{bmatrix} h_{\text{temp}}^T \\ h_{\text{tab}}^T \end{bmatrix} \in \mathbb{R}^{2 \times 64}$$
 - **Multi-Head Self-Attention ($h=4$ heads, key dimension $d_k = 16$)**:
@@ -171,6 +185,7 @@ flowchart TD
   $$h_{\text{fused}} = \frac{1}{2} \left( \mathbf{Z}^{(2)}_1 + \mathbf{Z}^{(2)}_2 \right) \in \mathbb{R}^{64}$$
 
 ### 5.4. Stage 4: Relational Graph & Graph Convolutional Network
+
 - **Pairwise Cosine Similarity**: For all patients $u, v$ within the same hospital $\mathcal{H}_j$:
   $$S_{u, v} = \frac{h_{\text{fused}}(u) \cdot h_{\text{fused}}(v)}{\|h_{\text{fused}}(u)\|_2 \|h_{\text{fused}}(v)\|_2}$$
 - **$k$-Nearest Neighbor Adjacency ($k=5$)**:
@@ -185,6 +200,7 @@ flowchart TD
   $$H_{\text{graph}} = H^{(2)} \in \mathbb{R}^{N \times 64}$$
 
 ### 5.5. Stage 5: Dual Prediction Heads & Multi-Task Loss
+
 - **Mortality Head**:
   $$\hat{y}_{\text{mort}} = W_{m2} \text{ReLU}(W_{m1} H_{\text{graph}} + b_{m1}) + b_{m2} \in \mathbb{R}$$
 - **Sepsis Head**:
@@ -200,6 +216,7 @@ flowchart TD
 ## 6. Complete Feature Dictionary
 
 ### 6.1. Temporal Features (46 Channels $\to$ 92 Dimensions with Indicators)
+
 1. **Laboratory Measurements (20 continuous variables)**:
    - `lab_anion gap`: Acid-base balance and metabolic acidosis marker.
    - `lab_bedside glucose`: Point-of-care capillary blood sugar.
@@ -242,6 +259,7 @@ flowchart TD
    - `med_zofran`: Antiemetic (Ondansetron).
 
 ### 6.2. Static Tabular Features (67 Dimensions)
+
 1. **Demographics & Admission Characteristics (10 variables)**:
    - Continuous: `age`, `BMI`, `hospitaladmitoffset`, `unitvisitnumber`.
    - Binary Indicators: `gender_Male`, `ethnicity_Caucasian`, `ethnicity_African American`, `ethnicity_Hispanic`, `ethnicity_Asian`, `ethnicity_Other`.
@@ -262,7 +280,9 @@ flowchart TD
 ### 7.1. Python Modules (`src/`)
 
 #### [`src/models/architecture.py`](file:///Users/aryandwivedi/Desktop/Project Hail Minor/src/models/architecture.py)
+
 Master neural network definition file (608 lines):
+
 - `TemporalEncoder`: Implements the 92-dimensional LSTM with `_last_valid_hidden` state extraction and dense projection to 64 dimensions. Supports dual multi-task heads (`use_sepsis_head=True`) predicting both mortality and sepsis.
 - `TabularAutoencoder`: Implements the 67-dimensional symmetric denoising autoencoder with Gaussian corruption ($\sigma=0.1$) and mortality classification head.
 - `MultimodalFusion`: Baseline concatenation fusion model ($128 \to 128 \to \text{Dropout}$).
@@ -274,7 +294,9 @@ Master neural network definition file (608 lines):
 - `MultiTaskLoss`: Composite loss function weighting binary cross-entropy for mortality ($w_{\text{mort}}$) and sepsis ($w_{\text{seps}}$) alongside tabular feature reconstruction MSE ($\lambda_{\text{recon}}$).
 
 #### [`src/data/dataset.py`](file:///Users/aryandwivedi/Desktop/Project Hail Minor/src/data/dataset.py)
+
 Data loading abstractions and feature definitions (363 lines):
+
 - Contains explicit column definitions (`TEMPORAL_FEATURE_COLS`, `TABULAR_FEATURE_COLS`, `TABULAR_CONT_COLS`).
 - `get_hospital_splits`: Splits hospital directories 70/15/15 into train, validation, and test.
 - `ICUSequenceDataset`: Loads 48-hour time series from Parquet, computes missingness indicators, applies LOCF, and packages samples as `(x, mask, y, [pid])`.
@@ -282,20 +304,26 @@ Data loading abstractions and feature definitions (363 lines):
 - `fit_scaler`: Utility computing mean and standard deviation for continuous columns strictly across training hospitals.
 
 #### [`src/data/extract_sepsis_labels.py`](file:///Users/aryandwivedi/Desktop/Project Hail Minor/src/data/extract_sepsis_labels.py)
+
 Ground truth label extractor (111 lines):
+
 - Iterates over all hospital subdirectories under `processed/hospitals/`.
 - Extracts sepsis patient IDs from `diagnosis.csv` (ICD-9 codes and text keywords) and `patient.csv` (`apacheadmissiondx`).
 - Aligns labels against existing patient ID index files (`checkpoints/temporal_patient_ids_{split}.npy`).
 - Generates `checkpoints/fusion/sepsis_labels_{train,val,test}.npy` and `checkpoints/fusion/sepsis_metadata.json`.
 
 #### [`src/data/cache_multitask_hospitals.py`](file:///Users/aryandwivedi/Desktop/Project Hail Minor/src/data/cache_multitask_hospitals.py)
+
 Pre-extraction ETL script (222 lines):
+
 - Fits continuous scalers on training hospitals and writes `checkpoints/fusion/multitask/multitask_scaler.json`.
 - Compiles each hospital's aligned multimodal tensors into `processed/multitask_cache/hospital_{id}.npz`.
 - Computes positive class weights ($w_{\text{mort}}, w_{\text{seps}}$) and saves `checkpoints/fusion/multitask/split_summary.json`.
 
 #### [`src/data/train_multitask_pipeline.py`](file:///Users/aryandwivedi/Desktop/Project Hail Minor/src/data/train_multitask_pipeline.py)
+
 End-to-end production training script (358 lines):
+
 - Implements intra-hospital batch training across the 145 training hospitals.
 - Updates weights using Adam ($\text{lr}=10^{-3}$, weight decay $= 10^{-4}$) and Cosine Annealing learning rate scheduling.
 - Evaluates on 31 unseen validation hospitals each epoch and tracks Mean AUPRC.
@@ -309,6 +337,7 @@ End-to-end production training script (358 lines):
 All project pipelines and ablation notebooks are structured modularly inside the [`src/`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/) directory:
 
 #### Temporal Encoding (`src/Temporal Encoding/`)
+
 1. [`src/Temporal Encoding/lstm_temporal_encoder.ipynb`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/Temporal%20Encoding/lstm_temporal_encoder.ipynb):
    - Implements the complete Phase 1 dual-task temporal LSTM pipeline predicting both **In-Hospital Mortality** and **ICU Sepsis**.
    - Features secondary `sepsis_head` (`Linear(64, 1)`), weighted dual-task BCE loss ($w_{\text{mort}} = 10.35, w_{\text{seps}} = 5.04$), 20-epoch training with Cosine Annealing, and gradient clipping ($5.0$).
@@ -316,6 +345,7 @@ All project pipelines and ablation notebooks are structured modularly inside the
    - Exports publication figure `figures/lstm_dual_task_evaluation.png`, metrics `checkpoints/lstm_baseline_metrics.json`, and dual-task representations: `checkpoints/temporal_embeddings_{train,val,test}.npy` and `checkpoints/temporal_sepsis_labels_{train,val,test}.npy`.
 
 #### Multi-Task End-to-End Integration (`src/`)
+
 2. [`src/multitask_pipeline.ipynb`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/multitask_pipeline.ipynb):
    - Complete Step 6 end-to-end multi-task integration notebook.
    - Reuses representations and empirical findings from all prior phases (Phase 1 dual-task temporal embeddings, Phase 2 tabular latents, Phase 3 cross-attention fusion, Phase 4 intra-hospital graphs $k=5$).
@@ -324,6 +354,7 @@ All project pipelines and ablation notebooks are structured modularly inside the
    - Generates 6-panel publication-quality test evaluation suite (`figures/multitask_evaluation_plots.png`) and comprehensive metrics summary.
 
 #### Multimodal Fusion Baselines (`src/multimodal fusion/`)
+
 3. [`src/multimodal fusion/fusion_additive.ipynb`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/multimodal%20fusion/fusion_additive.ipynb):
    - Evaluates element-wise addition fusion: $h = h_{\text{temp}} + h_{\text{tab}}$.
    - MLP classifier achieves Test AUROC: 0.8768, AUPRC: 0.5237, F1: 0.4960.
@@ -340,6 +371,7 @@ All project pipelines and ablation notebooks are structured modularly inside the
    - Exports attention checkpoint and embedding generation logic.
 
 #### Patient Similarity Graphs (`src/patient similarity graph/`)
+
 7. [`src/patient similarity graph/knn_k_grid_search.ipynb`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/patient%20similarity%20graph/knn_k_grid_search.ipynb):
    - Systematic grid search over graph neighborhood size $k \in \{5, 10, 15, 20, 30\}$.
    - Evaluates validation AUPRC on the attention-fused patient graph.
@@ -352,6 +384,7 @@ All project pipelines and ablation notebooks are structured modularly inside the
    - Precomputes sparse hospital-restricted $k$-NN graphs ($k=5$) and saves adjacency matrices in `patient_graphs_knn/`.
 
 #### Graph Neural Networks (`src/GNN/`)
+
 10. [`src/GNN/gcn_attention.ipynb`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/GNN/gcn_attention.ipynb):
     - Standalone 2-layer sparse GCN for mortality prediction trained on attention graphs.
     - Evaluates 12 HPO hyperparameter trials (best: hidden=256, dropout=0.35, lr=0.001).
@@ -453,36 +486,42 @@ All publication plots, diagnostic visualizations, and clinical interpretability 
 
 All evaluation metrics below were computed on the held-out **unseen test split** (22,809 patients from 31 unseen test hospitals):
 
-| Model Architecture | Evaluated Target | Test AUROC | Test AUPRC | Test $F_1$ | Test Accuracy | Balanced Accuracy | Sensitivity (Recall) | Specificity |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Stage 1: Standalone LSTM (Mortality)** | Mortality | 0.8474 | 0.4590 | 0.4421 | 89.41% | 69.88% | 45.99% | 93.77% |
-| **Stage 1: Standalone LSTM (Sepsis)** | Sepsis | 0.8668 | 0.6105 | 0.5404 | 77.23% | 78.95% | 81.50% | 76.39% |
-| **Additive Fusion Baseline** | Mortality | 0.8768 | 0.5237 | 0.4960 | 90.22% | 73.37% | 52.76% | 93.98% |
-| **Concatenation Fusion Baseline** | Mortality | 0.8782 | 0.5331 | 0.4999 | 90.33% | 73.52% | 52.96% | 94.08% |
-| **Gated Fusion Baseline** | Mortality | 0.8789 | 0.5289 | 0.5015 | 90.46% | 73.42% | 52.57% | 94.27% |
-| **Attention Fusion Baseline** | Mortality | **0.8793** | 0.5293 | **0.5044** | 90.22% | 74.17% | 54.54% | 93.80% |
-| **GCN (Attention Graph)** | Mortality | 0.8744 | 0.5126 | 0.4905 | 89.87% | 73.50% | 52.76% | 93.59% |
-| **GCN (Dedicated Sepsis)** | Sepsis | 0.8242 | 0.4618 | 0.4965 | 79.96% | 72.00% | 56.41% | 84.55% |
-| **Multi-Task Pipeline (Mortality)** | Mortality | 0.8712 | 0.4744 | 0.4779 | **90.39%** | 71.88% | 49.36% | **94.40%** |
-| **Multi-Task Pipeline (Sepsis)** | Sepsis | **0.9129** | **0.6364** | **0.5546** | 80.43% | **83.41%** | **87.53%** | 79.28% |
+| Model Architecture                                         | Evaluated Target | Test AUROC | Test AUPRC | Test $F_1$ | Test Accuracy | Balanced Accuracy | Sensitivity (Recall) | Specificity |
+| :--------------------------------------------------------- | :--------------- | :--------: | :--------: | :--------: | :-----------: | :---------------: | :------------------: | :---------: |
+| **Stage 1: Standalone LSTM (Mortality)**                   | Mortality        |   0.8474   |   0.4590   |   0.4421   |    89.41%     |      69.88%       |        45.99%        |   93.77%    |
+| **Stage 1: Standalone LSTM (Sepsis)**                      | Sepsis           |   0.8668   |   0.6105   |   0.5404   |    77.23%     |      78.95%       |        81.50%        |   76.39%    |
+| **Additive Fusion Baseline**                               | Mortality        |   0.8768   |   0.5237   |   0.4960   |    90.22%     |      73.37%       |        52.76%        |   93.98%    |
+| **Concatenation Fusion Baseline**                          | Mortality        |   0.8782   |   0.5331   |   0.4999   |    90.33%     |      73.52%       |        52.96%        |   94.08%    |
+| **Gated Fusion Baseline**                                  | Mortality        |   0.8789   |   0.5289   |   0.5015   |    90.46%     |      73.42%       |        52.57%        |   94.27%    |
+| **Attention Fusion Baseline**                              | Mortality        | **0.8793** |   0.5293   | **0.5044** |    90.22%     |      74.17%       |        54.54%        |   93.80%    |
+| **GCN (Attention Graph)**                                  | Mortality        |   0.8744   |   0.5126   |   0.4905   |    89.87%     |      73.50%       |        52.76%        |   93.59%    |
+| **GCN (Dedicated Sepsis)**                                 | Sepsis           |   0.8242   |   0.4618   |   0.4965   |    79.96%     |      72.00%       |        56.41%        |   84.55%    |
+| **Multi-Task Pipeline (Mortality, Clinically Calibrated)** | Mortality        |   0.8712   |   0.4744   |   0.4683   |    86.93%     |      76.87%       |      **64.63%**      |   89.11%    |
+| **Multi-Task Pipeline (Sepsis)**                           | Sepsis           | **0.9129** | **0.6364** | **0.5546** |    80.43%     |    **83.41%**     |      **87.53%**      |   79.28%    |
 
 ### Key Clinical & Technical Insights:
+
 1. **Multimodal Synergy**: Fusing static tabular data with temporal sequences yields a massive jump in mortality prediction (AUPRC increases from $0.4551$ to $0.5293$, $+7.42\%$ absolute gain).
 2. **Attention Superiority**: Multi-Head Cross-Attention achieved the highest test AUROC ($0.8793$) and highest $F_1$-score ($0.5044$) among all fusion strategies.
 3. **Multi-Task Sepsis Breakthrough**: The unified end-to-end Multi-Task GNN pipeline achieved state-of-the-art sepsis performance (**AUROC: 0.9129, AUPRC: 0.6364**), successfully capturing **87.53% of all sepsis cases** with a clinical $F_2$-score of **0.7109**.
+4. **Clinical Sensitivity Calibration for Mortality**: In ICU triage, missing an impending expiration (False Negative) carries fatal consequence. Standard unweighted $F_1$ optimization over 10:1 class imbalanced data drove the decision threshold up to $\tau = 0.69 - 0.75$, depressing mortality recall down to $49\% - 58\%$. Calibrating the decision threshold via clinical $F_\beta$ ($\beta=1.5$) with a validation sensitivity constraint ($\ge 65\%$) sets $\tau = 0.62$, boosting held-out test mortality recall to **64.63%** (+156 additional deceased patients flagged, reducing False Negatives from 1,018 to 862) while maintaining high specificity ($89.11\%$) and balanced accuracy ($76.87\%$).
 
 ---
 
 ## 9. Execution & Replication Guide
 
 ### 9.1. Environment Setup
+
 Verify Python 3.13+ environment with PyTorch and PyData dependencies:
+
 ```bash
 python3 -c "import torch, numpy, scipy, sklearn; print('All core libraries installed successfully!')"
 ```
 
 ### 9.2. Data Preprocessing & Hospital Caching
+
 Extract sepsis ground-truth labels and compile hospital multi-task tensors:
+
 ```bash
 # 1. Extract consensus sepsis ground-truth labels
 python3 src/data/extract_sepsis_labels.py
@@ -492,28 +531,38 @@ python3 src/data/cache_multitask_hospitals.py
 ```
 
 ### 9.3. Multi-Task Model Training
+
 Execute end-to-end multi-task training across all 145 training hospitals:
+
 ```bash
 python3 src/data/train_multitask_pipeline.py
 ```
 
 ### 9.4. Interactive Inspection & Demo
+
 Launch JupyterLab to interactively explore models, verify gradient flow, and inspect visualizations:
+
 ```bash
 jupyter lab
 ```
+
 Recommended execution order:
+
 1. [`src/multitask_pipeline.ipynb`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/multitask_pipeline.ipynb): End-to-end pipeline demonstration and test inspection.
 2. [`src/patient similarity graph/knn_k_grid_search.ipynb`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/patient%20similarity%20graph/knn_k_grid_search.ipynb): Graph neighborhood optimization.
 3. [`src/multimodal fusion/fusion_attention.ipynb`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/multimodal%20fusion/fusion_attention.ipynb): Cross-modal attention ablation.
 4. [`src/GNN/gcn_attention.ipynb`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/src/GNN/gcn_attention.ipynb): Graph convolutional network benchmarking.
 
 ### 9.5. Generating GCN Diagnostic & Ablation Curves
+
 Execute the automated analysis suite to generate all four core GCN diagnostic plots:
+
 ```bash
 python3 scripts/generate_gcn_analysis_plots.py
 ```
+
 This produces:
+
 - `figures/gcn_training_validation_loss.png`: Convergence and multi-task loss dynamics.
 - `figures/gcn_validation_metrics.png`: Epoch-wise AUROC and AUPRC progression for both mortality and sepsis.
 - `figures/gcn_graph_smoothing.png`: Mean neighbor cosine similarity across GCN depth.
@@ -524,12 +573,14 @@ This produces:
 ## 10. GCN-Specific Diagnostic & Representation Analysis
 
 ### 10.1. Multi-Task Training Convergence (Plot 1)
+
 - **Artifact**: [`figures/gcn_training_validation_loss.png`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/figures/gcn_training_validation_loss.png)
 - **Dynamics**: Shows smooth, stable monotonic decrease in total loss (from $2.40$ down to $1.52$ train, $1.58$ validation). Both task-specific objectives stabilize harmoniously without negative gradient interference:
   - Mortality BCE loss: $1.25 \to 0.86$ (train), $1.29 \to 0.91$ (validation).
   - Sepsis BCE loss: $1.15 \to 0.66$ (train), $1.09 \to 0.67$ (validation).
 
 ### 10.2. Validation Metric Trajectories (Plot 2)
+
 - **Artifact**: [`figures/gcn_validation_metrics.png`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/figures/gcn_validation_metrics.png)
 - **Trajectories**: Tracks validation AUROC and AUPRC across 50 epochs trained on multi-task fused representations:
   - **Validation AUROC (Left Plot)**:
@@ -543,6 +594,7 @@ This produces:
   - Updating the pipeline to use the unified multi-task fused representations (`multitask_fused_{train,val}.npz`) restored the true clinical dynamics where acute sepsis features enable Sepsis AUROC (~0.90) and AUPRC (~0.63) to consistently surpass mortality.
 
 ### 10.3. Graph Smoothing Across Layers (Plot 3)
+
 - **Artifact**: [`figures/gcn_graph_smoothing.png`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/figures/gcn_graph_smoothing.png)
 - **Connected Neighbor Cosine Similarity**:
   - **Before GCN (Fused Multi-Task Embeddings)**: $0.8953$
@@ -551,6 +603,7 @@ This produces:
 - **Interpretation**: Graph message passing effectively aggregates intra-hospital neighborhood clinical phenotypes. The similarity increases steadily from $0.8953$ to $0.9904$, demonstrating beneficial localized context assimilation while 2 layers prevent oversmoothing across distinct clinical subpopulations.
 
 ### 10.4. Graph Density Sensitivity Ablation (Plot 4)
+
 - **Artifact**: [`figures/gcn_k_sensitivity.png`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/figures/gcn_k_sensitivity.png)
 - **Neighborhood Size Evaluation ($k \in [1, 3, 5, 10, 15]$)**:
   - $k=1$: Mortality AUPRC = $0.4375$, Sepsis AUPRC = $0.6281$
@@ -565,6 +618,7 @@ This produces:
 ## 11. Attention-Based Multimodal Fusion Diagnostics & Interpretability
 
 ### 11.1. Multi-Head Specialization (Plot 1)
+
 - **Artifact**: [`figures/attention_fusion_head_matrices.png`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/figures/attention_fusion_head_matrices.png)
 - **Head Specialization**:
   - **Head 1 (Temporal Focus)**: $0.810$ Temporal $\to$ Temporal self-attention, $0.190$ Temporal $\to$ Tabular.
@@ -574,6 +628,7 @@ This produces:
   - **Overall Ensemble Mean**: Average attention places $65.6\%$ on temporal dynamics and $34.4\%$ on static tabular context.
 
 ### 11.2. Clinical Outcome Stratification (Plot 2)
+
 - **Artifact**: [`figures/attention_fusion_clinical_stratification.png`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/figures/attention_fusion_clinical_stratification.png)
 - **Clinical Shift ($\Delta = \text{Deceased} - \text{Survived}$)**:
   - **Survived Patients ($y=0$)**: Temporal $\to$ Temporal = $0.644$, Temporal $\to$ Tabular = $0.356$.
@@ -581,11 +636,11 @@ This produces:
   - **Clinical Finding**: When a patient acutely decompensates toward in-hospital mortality, the attention mechanism dynamically decouples from static chronic scores and re-allocates attention almost entirely to high-frequency deteriorating physiological trajectories.
 
 ### 11.3. Patient-Level Modality Weight Distributions (Plot 3)
+
 - **Artifact**: [`figures/attention_fusion_weight_distributions.png`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/figures/attention_fusion_weight_distributions.png)
 - **Distributional Dynamics**: Violin plots demonstrate that while surviving patients maintain a wide, balanced distribution across tabular context, non-surviving patients cluster tightly in the upper tail of temporal dependence.
 
 ### 11.4. Fused Multimodal Representation Manifold (Plot 4)
+
 - **Artifact**: [`figures/attention_fusion_latent_pca.png`](file:///Users/aryandwivedi/Desktop/Project%20Hail%20Minor/figures/attention_fusion_latent_pca.png)
 - **Manifold Separation**: PCA 2D projection of $h_{\text{fused}} \in \mathbb{R}^{64}$ across 24,186 validation patients demonstrates clear separability of critical decompensation cases along Principal Component 1.
-
-

@@ -54,6 +54,9 @@ LAMBDA_SEPSIS = 1.0
 LAMBDA_RECON = 0.1
 K_NEIGHBORS = 5
 SEED = 42
+BETA_MORTALITY = 1.5          # Clinical sensitivity weighting for mortality (ensures recall >= 60% without precision collapse)
+BETA_SEPSIS = 2.0             # Clinical sensitivity weighting for sepsis (early detection priority)
+MIN_MORTALITY_RECALL = 0.65   # Target validation recall constraint for mortality triage
 
 
 def set_seed(seed=42):
@@ -271,24 +274,32 @@ def main():
 
     thresholds = np.linspace(0.05, 0.95, 181)
     
-    # Mortality: optimize F1
-    mort_f1s = [f1_score(val_mort_y, (val_mort_probs >= t).astype(int), zero_division=0) for t in thresholds]
-    best_t_mort = float(thresholds[np.argmax(mort_f1s)])
+    # Mortality: optimize F_beta (clinical sensitivity weighting with beta=BETA_MORTALITY,
+    # ensuring validation recall >= MIN_MORTALITY_RECALL to surpass the 60% requirement on unseen test hospitals)
+    mort_scores = []
+    for t in thresholds:
+        pred_m = (val_mort_probs >= t).astype(int)
+        r = recall_score(val_mort_y, pred_m, zero_division=0)
+        p = precision_score(val_mort_y, pred_m, zero_division=0)
+        fb = fbeta(p, r, beta=BETA_MORTALITY)
+        score = fb if (r >= MIN_MORTALITY_RECALL) else (-1.0 + r)
+        mort_scores.append(score)
+    best_t_mort = float(thresholds[np.argmax(mort_scores)])
 
     # Sepsis: optimize F2 (clinical sensitivity)
     seps_f2s = [
         fbeta(
             precision_score(val_seps_y, (val_seps_probs >= t).astype(int), zero_division=0),
             recall_score(val_seps_y, (val_seps_probs >= t).astype(int), zero_division=0),
-            beta=2.0
+            beta=BETA_SEPSIS
         )
         for t in thresholds
     ]
     best_t_seps = float(thresholds[np.argmax(seps_f2s)])
 
     print(f"\nValidation Selected Thresholds:")
-    print(f"  Mortality (F1-optimal):              {best_t_mort:.4f}")
-    print(f"  Sepsis (F2-clinical sensitivity):    {best_t_seps:.4f}")
+    print(f"  Mortality (Clinical F_{BETA_MORTALITY} / Sensitivity Target >= {MIN_MORTALITY_RECALL*100:.0f}%): {best_t_mort:.4f}")
+    print(f"  Sepsis (F2-clinical sensitivity):                                       {best_t_seps:.4f}")
 
     # Evaluate Once on 31 Unseen Test Hospitals
     print("\nEvaluating on 31 Unseen Test Hospitals...")
