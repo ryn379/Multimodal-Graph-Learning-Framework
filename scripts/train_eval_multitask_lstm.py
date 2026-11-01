@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 """
-Train & Evaluate Dual-Task LSTM Temporal Encoder (Mortality + Sepsis)
-===================================================================
-Produces:
   1. checkpoints/lstm_temporal_encoder.pt (dual-task weights)
   2. checkpoints/lstm_baseline_metrics.json (dual-task test metrics)
   3. checkpoints/lstm_dual_task_evaluation.png (visual diagnostic plots)
@@ -390,7 +387,6 @@ print("=" * 78)
 print(comparison_df.to_string(index=False))
 print("=" * 78)
 
-# Save baseline metrics
 metrics_export = {
     "stage": "Phase1_TemporalEncoder_DualTask",
     "test_loss_total": float(test_m["loss"]),
@@ -407,7 +403,7 @@ print(f"Saved metrics to: {OUT_DIR / 'lstm_baseline_metrics.json'}")
 fig, axes = plt.subplots(2, 3, figsize=(18, 11))
 fig.suptitle("Dual-Task Temporal LSTM: Comprehensive Test Cohort Evaluation", fontsize=16, fontweight="bold", y=0.98)
 
-# 1. Confusion Matrix: Mortality
+#  Confusion Matrix: Mortality
 cm_m = np.array(mort_test_metrics["Confusion Matrix"])
 im0 = axes[0, 0].imshow(cm_m, cmap="Blues", interpolation="nearest")
 axes[0, 0].set_title(f"Mortality Confusion Matrix\n(Threshold = {best_thresh_mort:.2f})", fontsize=13, fontweight="semibold")
@@ -427,7 +423,7 @@ for i in range(2):
         )
 fig.colorbar(im0, ax=axes[0, 0], fraction=0.046, pad=0.04)
 
-# 2. Confusion Matrix: Sepsis
+#  Confusion Matrix: Sepsis
 cm_s = np.array(seps_test_metrics["Confusion Matrix"])
 im1 = axes[0, 1].imshow(cm_s, cmap="Purples", interpolation="nearest")
 axes[0, 1].set_title(f"Sepsis Confusion Matrix\n(Threshold = {best_thresh_seps:.2f})", fontsize=13, fontweight="semibold")
@@ -447,7 +443,7 @@ for i in range(2):
         )
 fig.colorbar(im1, ax=axes[0, 1], fraction=0.046, pad=0.04)
 
-# 3. Metric Comparison Bar Chart
+#  Metric Comparison Bar Chart
 metric_labels = ["Accuracy", "Bal. Acc", "Sensitivity", "Specificity", "F1 x 100", "F2 x 100"]
 m_vals = [
     mort_test_metrics["Accuracy (%)"], mort_test_metrics["Balanced Accuracy (%)"],
@@ -472,7 +468,7 @@ axes[0, 2].set_ylim(0, 105)
 axes[0, 2].legend(frameon=True)
 axes[0, 2].grid(axis="y", linestyle="--", alpha=0.4)
 
-# 4. ROC Curves
+# ROC Curves
 fpr_m, tpr_m, _ = roc_curve(y_test_mort, test_prob_mort)
 fpr_s, tpr_s, _ = roc_curve(y_test_seps, test_prob_seps)
 axes[1, 0].plot(fpr_m, tpr_m, color="#1f77b4", lw=2.5, label=f"Mortality (AUROC = {mort_test_metrics['AUROC']:.4f})")
@@ -491,7 +487,7 @@ axes[1, 1].set_ylabel("True Positive Rate (Recall)", fontsize=11)
 axes[1, 1].legend(loc="lower right", frameon=True)
 axes[1, 1].grid(linestyle="--", alpha=0.4)
 
-# 5. Precision-Recall Curves
+# PR Curves
 prec_m, rec_m, _ = precision_recall_curve(y_test_mort, test_prob_mort)
 prec_s, rec_s, _ = precision_recall_curve(y_test_seps, test_prob_seps)
 prev_m = float(np.mean(y_test_mort))
@@ -513,7 +509,6 @@ fig.savefig(plot_path, dpi=300, bbox_inches="tight")
 plt.close(fig)
 print(f"Saved diagnostic plots to: {plot_path}")
 
-# Embedding extraction
 print("\n--- Extracting Temporal Embeddings ---")
 train_embed_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
 val_embed_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)

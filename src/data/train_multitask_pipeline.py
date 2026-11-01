@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Step 6: End-to-End Multi-Task Multimodal GNN Training
-====================================================
+End-to-End Multi-Task Multimodal GNN Training
 Jointly trains:
   TemporalEncoder (LSTM) + TabularAutoencoder + AttentionFusion + PatientGraphGNN + Dual Heads
 On:
@@ -314,7 +313,6 @@ def main():
     print("\n================ TEST RESULTS: SEPSIS ================")
     print(json.dumps(seps_metrics, indent=2))
 
-    # Save Checkpoint, Metrics, and Predictions
     ckpt_path = OUT_DIR / "multitask_pipeline.pt"
     torch.save({
         "model_state_dict": best_state,

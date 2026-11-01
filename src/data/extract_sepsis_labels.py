@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Extract Sepsis Ground Truth Labels for eICU Cohort
-=================================================
 Identifies sepsis cases using:
 1. diagnosis.csv: ICD-9 codes (038.*, 995.91, 995.92, 785.52) or text diagnosis ('sepsis', 'septic').
 2. patient.csv: apacheadmissiondx containing 'sepsis' or 'septic'.

@@ -1,6 +1,5 @@
 #!/opt/homebrew/Cellar/jupyterlab/4.6.1/libexec/bin/python3
 """
-Generate GCN Analysis Plots:
 1. GCN Training and Validation Loss (Total + Mortality + Sepsis)
 2. GCN Validation AUROC and AUPRC across Epochs
 3. Graph Smoothing across GCN Layers (Connected Patient Neighbor Cosine Similarity)
@@ -150,9 +149,6 @@ def main():
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Executing GCN analysis on device: {device}")
 
-    # =========================================================================
-    # 1. Load Data
-    # =========================================================================
     print("Loading multi-task fused representations and cohort labels...")
     train_data = np.load(MULTITASK_DIR / "multitask_fused_train.npz")
     X_train_raw = train_data["embeddings"]
@@ -195,9 +191,6 @@ def main():
     A_train_t = scipy_to_torch_sparse(adj_norm_train, device)
     A_val_t = scipy_to_torch_sparse(adj_norm_val, device)
 
-    # =========================================================================
-    # 2. Train MultiTask GCN & Record History (Plots 1 & 2)
-    # =========================================================================
     print("\nTraining Multi-Task GCN (50 epochs) to record loss curves and validation metrics...")
     model = MultiTaskPatientGCN(in_features=64, hidden_dim=128, out_features=64, dropout=0.25).to(device)
     crit_mort = nn.BCEWithLogitsLoss(pos_weight=pos_w_mort_t)
@@ -221,7 +214,6 @@ def main():
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
         optimizer.step()
 
-        # --- VALIDATION ---
         model.eval()
         with torch.no_grad():
             mort_logits_val, seps_logits_val, _, _ = model(X_val_t, A_val_t)
@@ -268,9 +260,7 @@ def main():
     with open(CHECKPOINTS_DIR / "gcn_multitask_training_history.json", "w") as f:
         json.dump(history, f, indent=2)
 
-    # -------------------------------------------------------------------------
     # Plot 1: GCN Training and Validation Loss
-    # -------------------------------------------------------------------------
     print("\nGenerating Plot 1: GCN Training and Validation Loss...")
     hist = pd.DataFrame(history)
     epochs = range(1, len(hist) + 1)
@@ -299,9 +289,7 @@ def main():
     plt.close(fig)
     print(f"  -> Saved {FIGURES_DIR / 'gcn_training_validation_loss.png'}")
 
-    # -------------------------------------------------------------------------
     # Plot 2: GCN Validation AUROC and AUPRC across Epochs
-    # -------------------------------------------------------------------------
     print("\nGenerating Plot 2: GCN Validation AUROC and AUPRC...")
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -338,9 +326,7 @@ def main():
     plt.close(fig)
     print(f"  -> Saved {FIGURES_DIR / 'gcn_validation_metrics.png'}")
 
-    # =========================================================================
     # 3. Graph Smoothing across GCN Layers (Plot 3)
-    # =========================================================================
     print("\nComputing Graph Smoothing across GCN Layers (Plot 3)...")
     # Load best model checkpoint
     model.load_state_dict({k: v.to(device) for k, v in best_state.items()})
@@ -406,9 +392,7 @@ def main():
     with open(CHECKPOINTS_DIR / "gcn_graph_smoothing_results.json", "w") as f:
         json.dump(dict(zip(stages, scores)), f, indent=2)
 
-    # =========================================================================
     # 4. GCN Performance vs Number of Neighbours k (Plot 4)
-    # =========================================================================
     print("\nRunning Graph Ablation across k in [1, 3, 5, 10, 15] (Plot 4)...")
     K_VALUES = [1, 3, 5, 10, 15]
     MAX_K = 15
@@ -477,7 +461,7 @@ def main():
 
     graph_results.to_json(CHECKPOINTS_DIR / "gcn_k_sensitivity_results.json", orient="records", indent=2)
 
-    # Plot using exact user requested layout
+    # Plot layout
     plt.figure(figsize=(8, 5))
     plt.plot(
         graph_results["k"], graph_results["mortality_auprc"],

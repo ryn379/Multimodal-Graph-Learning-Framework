@@ -1,7 +1,5 @@
 #!/opt/homebrew/Cellar/jupyterlab/4.6.1/libexec/bin/python3
 """
-Attention-Based Multimodal Fusion Visualizations & Diagnostics:
-================================================================
 1. Cross-Modal Attention Heatmaps (4 Attention Heads + Ensemble Mean)
 2. Clinical Outcome Stratification Heatmaps (Survived vs Deceased)
 3. Patient-Level Modality Attention Weight Distributions (Violin/Box Plots)
@@ -16,6 +14,7 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 import torch
 import torch.nn as nn
+import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FIGURES_DIR = PROJECT_ROOT / "figures"
@@ -55,7 +54,6 @@ class AttentionFusionClassifier(nn.Module):
         )
 
     def forward(self, temporal, tabular, return_attention=False):
-        # Shape: (B, 2, embed_dim) [Token 0 = Temporal, Token 1 = Tabular]
         modalities = torch.stack([temporal, tabular], dim=1)
         attended, weights = self.attention(
             modalities,
@@ -75,36 +73,28 @@ class AttentionFusionClassifier(nn.Module):
 
 def main():
     print("Loading Attention Fusion model and validation embeddings...")
-    device = torch.device("cpu")  # CPU is deterministic and rapid for inference
+    device = torch.device("cpu")  
 
-    # 1. Load trained attention model
     model = AttentionFusionClassifier()
     model_path = ATTN_DIR / "attention_classifier.pt"
     state_dict = torch.load(model_path, map_location=device, weights_only=False)
     model.load_state_dict(state_dict)
     model.eval()
-
-    # 2. Load scalers and embeddings (Validation Split: 24,186 patients)
     scaler = np.load(ATTN_DIR / "input_scaler.npz")
     val_data = np.load(FUSION_DIR / "fused_embeddings_val.npz")
     temporal_raw = val_data["temporal_embeddings"]
     tabular_raw = val_data["tabular_embeddings"]
     y_val = val_data["labels"].astype(int)
 
-    # Standardize according to training statistics
     temp_norm = (temporal_raw - scaler["temporal_mean"]) / scaler["temporal_std"]
     tab_norm = (tabular_raw - scaler["tabular_mean"]) / scaler["tabular_std"]
 
-    # 3. Extract attention weights and fused embeddings
     with torch.no_grad():
         logits, weights, fused = model(
             torch.from_numpy(temp_norm).float(),
             torch.from_numpy(tab_norm).float(),
             return_attention=True,
         )
-
-    # weights shape: (N_patients, 4 heads, 2 tokens, 2 tokens)
-    # Token index 0: Temporal, Token index 1: Tabular
     weights_np = weights.numpy()
     fused_np = fused.numpy()
     modalities = ["Temporal", "Tabular"]
@@ -112,9 +102,7 @@ def main():
     print(f"Extracted attention weights for {len(weights_np):,} validation patients.")
     print(f"Outcome breakdown: Survived (y=0) = {(y_val == 0).sum():,}, Deceased (y=1) = {(y_val == 1).sum():,}")
 
-    # =========================================================================
     # Plot 1: 4 Attention Heads + Overall Mean Matrix
-    # =========================================================================
     print("\nGenerating Plot 1: Attention Head Heatmaps...")
     fig, axes = plt.subplots(1, 5, figsize=(20, 4.2))
 
@@ -137,7 +125,6 @@ def main():
         axes[h].set_ylabel("Query Token" if h == 0 else "", fontsize=11)
         axes[h].set_xlabel("Key Token", fontsize=11)
 
-    # Ensemble Mean across all 4 heads
     mean_matrix = weights_np.mean(axis=(0, 1))
     sns.heatmap(
         mean_matrix,
@@ -166,9 +153,7 @@ def main():
     plt.close(fig)
     print(f"  -> Saved {FIGURES_DIR / 'attention_fusion_head_matrices.png'}")
 
-    # =========================================================================
     # Plot 2: Clinical Outcome Stratification (Survived vs Deceased)
-    # =========================================================================
     print("\nGenerating Plot 2: Clinical Outcome Stratification Heatmaps...")
     mean_survived = weights_np[y_val == 0].mean(axis=(0, 1))
     mean_deceased = weights_np[y_val == 1].mean(axis=(0, 1))
@@ -234,17 +219,9 @@ def main():
     plt.close(fig)
     print(f"  -> Saved {FIGURES_DIR / 'attention_fusion_clinical_stratification.png'}")
 
-    # =========================================================================
-    # Plot 3: Distribution of Patient Attention Weights (Violin / Box Plot)
-    # =========================================================================
+    # Plot 3: Distribution of Patient Attention Weights 
     print("\nGenerating Plot 3: Attention Weight Distributions...")
-    # Average across the 4 heads for each patient
-    # weights_np: (N, 4, 2, 2) -> patient_weights: (N, 2, 2)
     patient_weights = weights_np.mean(axis=1)
-
-    # Focus on Temporal Query: how much it attends to Temporal vs Tabular
-    # patient_weights[:, 0, 0] = Temporal -> Temporal
-    # patient_weights[:, 0, 1] = Temporal -> Tabular
     attn_data = []
     for i in range(len(y_val)):
         outcome_str = "Deceased" if y_val[i] == 1 else "Survived"
@@ -256,13 +233,9 @@ def main():
             "Tabular -> Temporal": patient_weights[i, 1, 0],
             "Tabular -> Tabular": patient_weights[i, 1, 1],
         })
-
-    import pandas as pd
     df_attn = pd.DataFrame(attn_data)
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-
-    # Left: Temporal Query Attention Allocation
     sns.violinplot(
         data=df_attn,
         x="Outcome",
@@ -275,8 +248,6 @@ def main():
     axes[0].set_ylabel("Attention Weight (Temporal -> Temporal)", fontsize=11)
     axes[0].set_xlabel("Clinical Outcome", fontsize=11)
     axes[0].grid(axis="y", alpha=0.3)
-
-    # Right: Cross-Modal Interaction (Temporal -> Tabular)
     sns.violinplot(
         data=df_attn,
         x="Outcome",
@@ -301,9 +272,7 @@ def main():
     plt.close(fig)
     print(f"  -> Saved {FIGURES_DIR / 'attention_fusion_weight_distributions.png'}")
 
-    # =========================================================================
     # Plot 4: Fused Representation Latent Space (PCA Projection)
-    # =========================================================================
     print("\nGenerating Plot 4: Fused Multimodal Representation PCA Projection...")
     pca = PCA(n_components=2, random_state=42)
     coords = pca.fit_transform(fused_np)
@@ -341,7 +310,6 @@ def main():
     plt.close(fig)
     print(f"  -> Saved {FIGURES_DIR / 'attention_fusion_latent_pca.png'}")
 
-    # Save numeric summary
     summary = {
         "head_1": weights_np[:, 0].mean(axis=0).tolist(),
         "head_2": weights_np[:, 1].mean(axis=0).tolist(),

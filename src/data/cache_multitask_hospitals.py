@@ -1,18 +1,6 @@
 #!/usr/bin/env python3
 """
 Pre-extract and Cache Hospital-Level Multimodal Multi-Task Tensors
-================================================================
-Aligns:
-  - Temporal sequences (12, 92) [46 features + 46 missingness indicators]
-  - Tabular clinical features (67,)
-  - Joint Targets:
-      y_mortality: in-hospital mortality (0 or 1)
-      y_sepsis: ICU sepsis from diagnosis / APACHE (0 or 1)
-  - Split protocol strictly following processed/hospital_split.json:
-      Train: 145 hospitals
-      Val:   31 hospitals
-      Test:  31 hospitals
-
 Outputs:
   - processed/multitask_cache/hospital_*.npz
   - checkpoints/fusion/multitask/multitask_scaler.json

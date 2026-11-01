@@ -34,10 +34,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Stage 1 : Temporal Encoder (LSTM)
-# ──────────────────────────────────────────────────────────────────────────────
 
 class TemporalEncoder(nn.Module):
     """
@@ -93,7 +90,6 @@ class TemporalEncoder(nn.Module):
         else:
             self.sepsis_head = None
 
-    # ------------------------------------------------------------------
     def _last_valid_hidden(
         self,
         lstm_out: torch.Tensor,
@@ -115,7 +111,6 @@ class TemporalEncoder(nn.Module):
             return lstm_out[batch_idx, lengths]           # (batch, hidden)
         return hidden_last
 
-    # ------------------------------------------------------------------
     def embed(
         self,
         x: torch.Tensor,
@@ -130,7 +125,6 @@ class TemporalEncoder(nn.Module):
         emb = self.proj(self.dropout(last_h))            # (batch, emb_dim)
         return emb
 
-    # ------------------------------------------------------------------
     def forward(
         self,
         x: torch.Tensor,
@@ -150,13 +144,11 @@ class TemporalEncoder(nn.Module):
         return mort_logit
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Stage 2 : Tabular Denoising Autoencoder
-# ──────────────────────────────────────────────────────────────────────────────
+# Stage 2 : Tabular Autoencoder
 
 class TabularAutoencoder(nn.Module):
     """
-    Symmetric denoising autoencoder for static clinical features.
+    Symmetric autoencoder for static clinical features.
 
     Architecture:
         Encoder: Linear(input_dim) → BN → ReLU → Linear(128) → ReLU → Linear(64)
@@ -169,7 +161,6 @@ class TabularAutoencoder(nn.Module):
     The encoder exposes an ``encode()`` method for downstream fusion.
 
     Parameters
-    ----------
     input_dim  : number of static features  (default 67)
     noise_std  : Gaussian noise σ added to input during training
     """
@@ -200,12 +191,10 @@ class TabularAutoencoder(nn.Module):
         # Downstream classification head
         self.head = nn.Linear(64, 1)
 
-    # ------------------------------------------------------------------
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """Return tabular embedding (batch, 64)."""
         return self.encoder(x)
 
-    # ------------------------------------------------------------------
     def forward(self, x: torch.Tensor, training: bool = False):
         """
         Returns
@@ -223,10 +212,7 @@ class TabularAutoencoder(nn.Module):
         logit  = self.head(latent).squeeze(-1)  # (batch,)
         return logit, recon, latent
 
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Stage 3 : Multimodal Fusion
-# ──────────────────────────────────────────────────────────────────────────────
 
 class MultimodalFusion(nn.Module):
     """
@@ -301,9 +287,7 @@ class AttentionFusion(nn.Module):
         return x.mean(dim=1)  # (B, embed_dim)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # Stage 4 : Patient Similarity Graph + GNN
-# ──────────────────────────────────────────────────────────────────────────────
 
 class GraphConvLayer(nn.Module):
     """
@@ -369,7 +353,6 @@ class PatientGraphGNN(nn.Module):
         self.conv2 = GraphConvLayer(hidden, out_features)
         self.dropout = nn.Dropout(dropout)
 
-    # ------------------------------------------------------------------
     @staticmethod
     def build_adj(
         embeddings: torch.Tensor,
@@ -407,7 +390,6 @@ class PatientGraphGNN(nn.Module):
         adj_norm = d_inv_sqrt.unsqueeze(-1) * adj * d_inv_sqrt.unsqueeze(0)
         return adj_norm
 
-    # ------------------------------------------------------------------
     def forward(
         self,
         x: torch.Tensor,
@@ -428,10 +410,7 @@ class PatientGraphGNN(nn.Module):
         h = self.conv2(h, adj_norm)        # (N, out_features)
         return h
 
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Stage 5 : Prediction Heads
-# ──────────────────────────────────────────────────────────────────────────────
 
 class MortalityHead(nn.Module):
     """Binary mortality prediction head.  Returns a scalar logit."""
@@ -466,11 +445,7 @@ class SepsisHead(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x).squeeze(-1)
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Full Pipeline (Stages 1–5 composed)
-# ──────────────────────────────────────────────────────────────────────────────
-
+# Full Pipeline 
 class MultimodalGNNPipeline(nn.Module):
     """
     End-to-end multimodal pipeline:
@@ -539,7 +514,6 @@ class MultimodalGNNPipeline(nn.Module):
         self.mortality_head = MortalityHead(in_features=gnn_out)
         self.sepsis_head = SepsisHead(in_features=gnn_out) if use_sepsis_head else None
 
-    # ------------------------------------------------------------------
     def forward(
         self,
         x_seq: torch.Tensor,

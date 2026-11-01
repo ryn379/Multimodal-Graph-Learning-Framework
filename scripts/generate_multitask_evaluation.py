@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-Evaluate Multi-Task Multimodal GNN Pipeline & Generate Diagnostic Figures
-=========================================================================
 Uses:
   1. checkpoints/fusion/multitask/multitask_pipeline.pt
   2. checkpoints/fusion/multitask/split_summary.json
@@ -49,14 +47,14 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 print(f"Device: {device}")
 
-# 1. Load split summary
+# split summary
 with open(OUT_DIR / "split_summary.json") as f:
     summary = json.load(f)
 
 val_hospitals = summary["val"]["hospital_names"]
 test_hospitals = summary["test"]["hospital_names"]
 
-# 2. Load model
+# loading model
 ckpt_path = OUT_DIR / "multitask_pipeline.pt"
 ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
 model = MultimodalGNNPipeline(k_neighbors=5, use_sepsis_head=True).to(device)
@@ -95,8 +93,6 @@ def evaluate_split(model, hospital_names):
         "pids": np.asarray(all_pids),
     }
 
-
-# 3. Calibrate on validation set
 print("\n--- Evaluating Validation Set (31 Unseen Hospitals) ---")
 val_data = evaluate_split(model, val_hospitals)
 
@@ -141,16 +137,13 @@ def find_best_threshold(y_true, y_prob, metric="f1", beta=1.0, min_recall=None):
     return best_thresh, pd.DataFrame(records)
 
 
-# Clinical calibration: In ICU mortality prediction, missing a critical patient (false negative) is fatal.
-# Standard F1 optimization under 10:1 class imbalance picks an overly conservative cutoff (~0.69-0.75),
-# suppressing recall to ~49-58%. Calibrating with F_beta (beta=1.5 and min_recall=0.65) safely boosts recall to >= 64%.
 thresh_mort, df_val_mort = find_best_threshold(val_data["mort_y"], val_data["mort_probs"], metric="fbeta", beta=1.5, min_recall=0.65)
 thresh_seps, df_val_seps = find_best_threshold(val_data["seps_y"], val_data["seps_probs"], metric="fbeta", beta=2.0)
 
 print(f"Optimal Mortality Threshold: {thresh_mort:.2f} (clinical F1.5 / sensitivity target >= 60%)")
 print(f"Optimal Sepsis Threshold:    {thresh_seps:.2f} (max F2 clinical early warning)")
 
-# 4. Evaluate on held-out test set
+#evaluation
 print("\n--- Evaluating Test Set (31 Unseen Hospitals) ---")
 test_data = evaluate_split(model, test_hospitals)
 
@@ -188,7 +181,6 @@ def compute_metrics(y_true, y_prob, threshold, task_name):
 test_mort_metrics = compute_metrics(test_data["mort_y"], test_data["mort_probs"], thresh_mort, "In-Hospital Mortality")
 test_seps_metrics = compute_metrics(test_data["seps_y"], test_data["seps_probs"], thresh_seps, "Sepsis")
 
-# 5. Build comparison DataFrame
 comparison_rows = []
 for k, label in [
     ("threshold", "Optimal Threshold"),
@@ -233,7 +225,7 @@ print("=" * 80)
 print(phase_df.to_string(index=False))
 print("=" * 80)
 
-# 6. Save metrics json & predictions
+# saving
 metrics_dict = {
     "model": "end_to_end_multimodal_multitask_pipeline",
     "best_epoch": int(ckpt["best_epoch"]),
@@ -258,11 +250,10 @@ np.savez_compressed(
     pids=test_data["pids"],
 )
 
-# 7. Generate publication diagnostic figure
 fig, axes = plt.subplots(2, 3, figsize=(18, 11))
 fig.suptitle("Multi-Task Multimodal GNN Pipeline: Held-Out Test Cohort Evaluation", fontsize=16, fontweight="bold", y=0.98)
 
-# 1. Confusion Matrix: Mortality
+# mortality confusion matrix
 cm_m = np.array(test_mort_metrics["confusion_matrix"])
 im0 = axes[0, 0].imshow(cm_m, cmap="Blues", interpolation="nearest")
 axes[0, 0].set_title(f"Mortality Confusion Matrix\n(Threshold = {thresh_mort:.2f})", fontsize=13, fontweight="semibold")
@@ -282,7 +273,7 @@ for i in range(2):
         )
 fig.colorbar(im0, ax=axes[0, 0], fraction=0.046, pad=0.04)
 
-# 2. Confusion Matrix: Sepsis
+# sepsis confusion matrix
 cm_s = np.array(test_seps_metrics["confusion_matrix"])
 im1 = axes[0, 1].imshow(cm_s, cmap="Purples", interpolation="nearest")
 axes[0, 1].set_title(f"Sepsis Confusion Matrix\n(Threshold = {thresh_seps:.2f})", fontsize=13, fontweight="semibold")
@@ -302,7 +293,7 @@ for i in range(2):
         )
 fig.colorbar(im1, ax=axes[0, 1], fraction=0.046, pad=0.04)
 
-# 3. Metric Comparison Bar Chart across tasks
+# bar chart metric comparison
 metric_labels = ["Accuracy", "Bal. Acc", "Sensitivity", "Specificity", "F1 x 100", "F2 x 100"]
 m_vals = [
     test_mort_metrics["accuracy"], test_mort_metrics["balanced_accuracy"],
@@ -327,7 +318,7 @@ axes[0, 2].set_ylim(0, 105)
 axes[0, 2].legend(frameon=True)
 axes[0, 2].grid(axis="y", linestyle="--", alpha=0.4)
 
-# 4. ROC Curves
+# ROC curves
 fpr_m, tpr_m, _ = roc_curve(test_data["mort_y"], test_data["mort_probs"])
 fpr_s, tpr_s, _ = roc_curve(test_data["seps_y"], test_data["seps_probs"])
 axes[1, 0].plot(fpr_m, tpr_m, color="#1f77b4", lw=2.5, label=f"Mortality (AUROC = {test_mort_metrics['auroc']:.4f})")
@@ -346,7 +337,7 @@ axes[1, 1].set_ylabel("True Positive Rate (Recall)", fontsize=11)
 axes[1, 1].legend(loc="lower right", frameon=True)
 axes[1, 1].grid(linestyle="--", alpha=0.4)
 
-# 5. Precision-Recall Curves
+# PR curves
 prec_m, rec_m, _ = precision_recall_curve(test_data["mort_y"], test_data["mort_probs"])
 prec_s, rec_s, _ = precision_recall_curve(test_data["seps_y"], test_data["seps_probs"])
 prev_m = float(np.mean(test_data["mort_y"]))

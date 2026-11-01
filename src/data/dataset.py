@@ -1,13 +1,10 @@
 
 """
 eICU Multimodal Dataset Loaders
-================================
 Provides Dataset classes for:
   - ICUSequenceDataset: (12, 92) tensors for the LSTM temporal encoder
   - ICUTabularDataset: (67,) tensors for the Tabular Autoencoder
   - ICUFusedDataset: merged temporal + tabular embeddings keyed by patient ID
-
-Hospital-level splits prevent practice-pattern leakage.
 """
 
 from pathlib import Path
