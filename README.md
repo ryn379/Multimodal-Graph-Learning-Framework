@@ -10,7 +10,7 @@ An enterprise-grade, end-to-end deep learning framework for intensive care unit 
 
 1. **In-Hospital Mortality Prediction** (Prevalence $\approx 8.8\%$): Calibrated for high clinical sensitivity (**$64.63\%$**) and high specificity (**$89.11\%$**), achieving **$0.8712$ AUROC** and **$0.4744$ AUPRC** on held-out unseen hospitals.
 2. **ICU Sepsis Phenotyping & Early Warning** (Prevalence $\approx 15.2\%$): Consensus phenotype derived from ICD-9 and APACHE admission indications, achieving state-of-the-art **$0.9129$ AUROC**, **$0.6364$ AUPRC**, **$87.53\%$ sensitivity**, and an $F_2$-score of **$0.7109$**.
-3. **Auxiliary Feature Reconstruction**: A symmetric Denoising Autoencoder (DAE) reconstructing 67 tabular clinical features to regularize the latent space and prevent representation collapse during joint multi-task optimization.
+3. **Auxiliary Feature Reconstruction**: A symmetric Denoising/MLP Autoencoder reconstructing 67 tabular clinical features to regularize the latent space and prevent representation collapse during joint multi-task optimization.
 
 ---
 
@@ -47,7 +47,7 @@ Traditional machine learning approaches treat patient encounters as independent,
 
 This framework addresses these limitations through a unified multi-stage architecture:
 
-1. **Intra-Patient Multimodal Synergy**: Discretizes irregular time series into 12 four-hour windows with explicit missingness indicators, encoded via an LSTM. Static baselines are encoded via a Denoising Autoencoder. Both representations are fused via **Multi-Head Cross-Attention** ($h=4$), dynamically weighting temporal trajectories against chronic baseline context.
+1. **Intra-Patient Multimodal Synergy**: Discretizes irregular time series into 12 four-hour windows with explicit missingness indicators, encoded via an LSTM. Static baselines are encoded via a Denoising Autoencoder / MLP Autoencoder. Both representations are fused via **Multi-Head Cross-Attention** ($h=4$), dynamically weighting temporal trajectories against chronic baseline context.
 2. **Inter-Patient Relational Topology**: Builds sparse intra-hospital $k$-nearest neighbor ($k=5$) cosine similarity graphs. Graph message passing via a 2-layer Kipf & Welling Graph Convolutional Network (GCN) allows representations to assimilate localized phenotypic consensus without institutional data leakage.
 3. **Joint Multi-Task Optimization**: Simultaneously optimizes for in-hospital mortality, consensus sepsis phenotyping, and tabular feature reconstruction using positive-class-weighted binary cross-entropy.
 
@@ -68,7 +68,7 @@ flowchart TD
     subgraph S2["Stage 2: Static Clinical Baseline"]
         Tab_In["Static Clinical Records<br/>67 Tabular Features (APACHE IV, Comorbidities)"]
         Tab_Norm["Train-Only Z-Score Standardization<br/>Vector: (N, 67)"]
-        DAE["Tabular Denoising Autoencoder<br/>Gaussian Noise (sigma=0.1), Latent: 64"]
+        DAE["Tabular Denoising/MLP Autoencoder"]
         Tab_Emb["Tabular Latent<br/>h_tab in R^64"]
         Tab_Recon["Reconstruction<br/>x_hat in R^67"]
         Tab_In --> Tab_Norm --> DAE
@@ -138,7 +138,7 @@ ICU physiological monitoring features irregular sampling intervals and missing l
   $$\mathbf{h}_{\text{temp}} = \text{ReLU}\left( W_p \cdot \text{Dropout}_{0.25}(\mathbf{h}_{\text{last}}) + b_p \right) \in \mathbb{R}^{64}$$
   where $W_p \in \mathbb{R}^{64 \times 128}$ and $b_p \in \mathbb{R}^{64}$.
 
-### 3.2 Stage 2: Tabular Denoising Autoencoder (DAE)
+### 3.2 Stage 2: Tabular Autoencoder
 
 To regularize representation learning over 67 static features and prevent latent representation collapse, the autoencoder injects additive Gaussian noise during training:
 $$\tilde{\mathbf{x}}_{\text{tab}} = \mathbf{x}_{\text{tab}} + \boldsymbol{\epsilon}, \quad \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, 0.1^2 \cdot \mathbf{I}_{67})$$
@@ -293,7 +293,7 @@ All diagnostic and interpretability figures are pre-generated and stored in `fig
 ### 7.1 Multi-Task End-to-End Evaluation Suite
 
 ![Multi-Task Evaluation](figures/multitask_evaluation_plots.png)
-_Figure 1: Comprehensive 6-panel evaluation on 27,360 held-out test patients across 31 unseen hospitals. (Top-Left) Multi-Task ROC curves: Sepsis AUROC = 0.9129, Mortality AUROC = 0.8712. (Top-Center) Precision-Recall curves: Sepsis AUPRC = 0.6364, Mortality AUPRC = 0.4744. (Top-Right) F1 / F2 threshold sweeps showing optimal clinical operating points ($\tau_{\text{mort}} = 0.62, \tau_{\text{seps}} = 0.49$). (Bottom-Left & Bottom-Center) Confusion matrices showing 87.53% sensitivity for Sepsis and 64.63% sensitivity for Mortality. (Bottom-Right) Cross-phase performance trajectory._
+_Figure 1: Comprehensive 6-panel evaluation on 27,360 held-out test patients across 31 unseen hospitals. (Top-Left) Multi-Task ROC curves: Sepsis AUROC = 0.9129, Mortality AUROC = 0.8712. (Top-Center) Precision-Recall curves: Sepsis AUPRC = 0.6364, Mortality AUPRC = 0.4744. (Top-Right) F1 / F2 threshold sweeps showing optimal clinical operating points ($\tau_{\text{mort}} = 0.62, \tau*{\text{seps}} = 0.49$). (Bottom-Left & Bottom-Center) Confusion matrices showing 87.53% sensitivity for Sepsis and 64.63% sensitivity for Mortality. (Bottom-Right) Cross-phase performance trajectory.*
 
 ---
 
