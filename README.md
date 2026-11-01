@@ -3,7 +3,7 @@
 [![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch 2.x](https://img.shields.io/badge/PyTorch-2.x-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Hardware Acceleration](https://img.shields.io/badge/Hardware-Apple%20Silicon%20MPS%20%7C%20CUDA-green.svg)](https://developer.apple.com/metal/pytorch/)
-[![Dataset: eICU v2.0](<https://img.shields.io/badge/Dataset-eICU%20v2.0%20(200k%2B%20stays)-orange.svg>)](https://eicu-crd.mit.edu/)
+[![Dataset: eICU v2.0](https://img.shields.io/badge/Dataset-eICU%20v2.0%20%28200k%2B%20stays%29-orange.svg)](https://eicu-crd.mit.edu/)
 [![Zero Institutional Leakage](https://img.shields.io/badge/Validation-Hospital--Level%20Partitioning-success.svg)](#4-hospital-level-partitioning--leakage-prevention)
 [![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey.svg)](#11-medical-ai-ethics--clinical-disclaimer)
 
@@ -48,7 +48,7 @@ Traditional machine learning approaches treat patient encounters as independent,
 
 This framework addresses these limitations through a unified multi-stage architecture:
 
-1. **Intra-Patient Multimodal Synergy**: Discretizes irregular time series into 12 four-hour windows with explicit missingness indicators, encoded via an LSTM. Static baselines are encoded via a Denoising Autoencoder. Both representations are fused via **Multi-Head Cross-Attention** ($h=4$), dynamically weighing temporal trajectories against chronic baseline context.
+1. **Intra-Patient Multimodal Synergy**: Discretizes irregular time series into 12 four-hour windows with explicit missingness indicators, encoded via an LSTM. Static baselines are encoded via a Denoising Autoencoder. Both representations are fused via **Multi-Head Cross-Attention** ($h=4$), dynamically weighting temporal trajectories against chronic baseline context.
 2. **Inter-Patient Relational Topology**: Builds sparse intra-hospital $k$-nearest neighbor ($k=5$) cosine similarity graphs. Graph message passing via a 2-layer Kipf & Welling Graph Convolutional Network (GCN) allows representations to assimilate localized phenotypic consensus without institutional data leakage.
 3. **Joint Multi-Task Optimization**: Simultaneously optimizes for in-hospital mortality, consensus sepsis phenotyping, and tabular feature reconstruction using positive-class-weighted binary cross-entropy.
 
@@ -119,63 +119,94 @@ flowchart TD
 
 ### 3.1 Stage 1: Temporal Encoder (LSTM with Missingness Indicators)
 
-ICU physiological monitoring features irregular sampling intervals and missing lab draws.
+ICU physiological monitoring features irregular sampling intervals and missing lab draws. The model processes the first 48 hours of each ICU admission discretized into $T = 12$ uniform 4-hour bins ($t \in \{0, 1, \dots, 11\}$).
 
-- **Time Window**: First 48 hours of ICU stay discretized into $T = 12$ uniform 4-hour bins ($t \in \{0, 1, \dots, 11\}$).
 - **Missingness Indicator Formulation**:
+  For each physiological channel $c \in \{1, \dots, 46\}$ and time bin $t$:
   $$M_{t, c} = \begin{cases} 1 & \text{if channel } c \text{ is observed in bin } t \\ 0 & \text{if channel } c \text{ is missing in bin } t \end{cases}$$
+
 - **Last Observation Carried Forward (LOCF)**:
-  $$X^{\text{imp}}_{t, c} = \begin{cases} X_{t, c} & \text{if } M_{t, c} = 1 \\ X^{\text{imp}}_{t-1, c} & \text{if } M_{t, c} = 0 \text{ and } t > 0 \\ 0 & \text{otherwise} \end{cases}$$
-- **Input Tensor**: Concatenation of imputed values and binary indicators: $\tilde{X}_t = [X^{\text{imp}}_t \parallel M_t] \in \mathbb{R}^{92}$.
-- **Recurrent State Extraction**:
-  $$h_t, c_t = \text{LSTM}(\tilde{X}_t, (h_{t-1}, c_{t-1})), \quad h_t \in \mathbb{R}^{128}$$
-  $$h_{\text{last}} = h_{\tau-1} \quad \text{for stay length } \tau \le 12$$
-  $$h_{\text{temp}} = \text{ReLU}(W_p h_{\text{last}} + b_p) \in \mathbb{R}^{64}$$
+  $$X^{\text{imp}}_{t, c} = \begin{cases} X_{t, c} & \text{if } M_{t, c} = 1 \\ X^{\text{imp}}_{t-1, c} & \text{if } M_{t, c} = 0 \text{ and } t > 0 \\ 0 & \text{if } M_{t, c} = 0 \text{ and } t = 0 \end{cases}$$
+
+- **Concatenated Input Sequence**:
+  At each timestep $t$, the imputed values and binary missingness indicators are concatenated:
+  $$\tilde{\mathbf{x}}_t = [\mathbf{X}^{\text{imp}}_t \mathbin{\Vert} \mathbf{M}_t] \in \mathbb{R}^{92}$$
+  where $\mathbin{\Vert}$ denotes feature concatenation ($46 + 46 = 92$ channels).
+
+- **Recurrent State Extraction & Dense Projection**:
+  $$\mathbf{h}_t, \mathbf{c}_t = \text{LSTM}(\tilde{\mathbf{x}}_t, (\mathbf{h}_{t-1}, \mathbf{c}_{t-1})), \quad \mathbf{h}_t \in \mathbb{R}^{128}$$
+  $$\mathbf{h}_{\text{last}} = \mathbf{h}_{\tau-1} \quad \text{for stay length } \tau \le 12 \text{ (last valid non-padded bin)}$$
+  $$\mathbf{h}_{\text{temp}} = \text{ReLU}\left( W_p \cdot \text{Dropout}_{0.25}(\mathbf{h}_{\text{last}}) + b_p \right) \in \mathbb{R}^{64}$$
+  where $W_p \in \mathbb{R}^{64 \times 128}$ and $b_p \in \mathbb{R}^{64}$.
 
 ### 3.2 Stage 2: Tabular Denoising Autoencoder (DAE)
 
-To regularize representation learning over 67 static features, the autoencoder injects Gaussian corruption during training:
-$$\tilde{x}_{\text{tab}} = x_{\text{tab}} + \epsilon, \quad \epsilon \sim \mathcal{N}(0, 0.1^2 \cdot I_{67})$$
+To regularize representation learning over 67 static features and prevent latent representation collapse, the autoencoder injects additive Gaussian noise during training:
+$$\tilde{\mathbf{x}}_{\text{tab}} = \mathbf{x}_{\text{tab}} + \boldsymbol{\epsilon}, \quad \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, 0.1^2 \cdot \mathbf{I}_{67})$$
 
-- **Encoder**: $z_1 = \text{ReLU}(\text{BatchNorm1d}(W_{e1} \tilde{x}_{\text{tab}} + b_{e1})) \in \mathbb{R}^{67}$; $z_2 = \text{ReLU}(W_{e2} z_1 + b_{e2}) \in \mathbb{R}^{128}$; $h_{\text{tab}} = W_{e3} z_2 + b_{e3} \in \mathbb{R}^{64}$.
-- **Decoder**: $d_1 = \text{ReLU}(W_{d1} h_{\text{tab}} + b_{d1}) \in \mathbb{R}^{128}$; $\hat{x}_{\text{tab}} = W_{d2} d_1 + b_{d2} \in \mathbb{R}^{67}$.
+- **Multi-Layer Encoder**:
+  $$\mathbf{z}_1 = \text{ReLU}\left( \text{BatchNorm1d}(W_{e1} \tilde{\mathbf{x}}_{\text{tab}} + b_{e1}) \right) \in \mathbb{R}^{67}, \quad W_{e1} \in \mathbb{R}^{67 \times 67}$$
+  $$\mathbf{z}_2 = \text{ReLU}\left( W_{e2} \mathbf{z}_1 + b_{e2} \right) \in \mathbb{R}^{128}, \quad W_{e2} \in \mathbb{R}^{128 \times 67}$$
+  $$\mathbf{h}_{\text{tab}} = W_{e3} \mathbf{z}_2 + b_{e3} \in \mathbb{R}^{64}, \quad W_{e3} \in \mathbb{R}^{64 \times 128}$$
 
-### 3.3 Stage 3: Multi-Head Cross-Attention Fusion
+- **Symmetric Reconstruction Decoder**:
+  $$\mathbf{d}_1 = \text{ReLU}\left( W_{d1} \mathbf{h}_{\text{tab}} + b_{d1} \right) \in \mathbb{R}^{128}, \quad W_{d1} \in \mathbb{R}^{128 \times 64}$$
+  $$\hat{\mathbf{x}}_{\text{tab}} = W_{d2} \mathbf{d}_1 + b_{d2} \in \mathbb{R}^{67}, \quad W_{d2} \in \mathbb{R}^{67 \times 128}$$
 
-Rather than naive vector concatenation, the two representations are treated as a sequence of length 2:
-$$\mathbf{Z}^{(0)} = \begin{bmatrix} h_{\text{temp}}^T \\ h_{\text{tab}}^T \end{bmatrix} \in \mathbb{R}^{2 \times 64}$$
+### 3.3 Stage 3: Cross-Modal Multi-Head Attention Fusion
 
-- **Multi-Head Self-Attention ($h=4, d_k=16$)**:
-  $$\text{head}_i = \text{Softmax}\left( \frac{(\mathbf{Z}^{(0)} W_i^Q)(\mathbf{Z}^{(0)} W_i^K)^T}{\sqrt{16}} \right) (\mathbf{Z}^{(0)} W_i^V)$$
-- **Residual & Feed-Forward Layers**:
-  $$\mathbf{Z}^{(1)} = \text{LayerNorm}\left( \mathbf{Z}^{(0)} + [\text{head}_1 \parallel \dots \parallel \text{head}_4] W^O \right)$$
+Rather than naive vector concatenation, temporal and static representations are treated as a 2-token multimodal sequence:
+$$\mathbf{Z}^{(0)} = \begin{bmatrix} \mathbf{h}_{\text{temp}}^T \\ \mathbf{h}_{\text{tab}}^T \end{bmatrix} \in \mathbb{R}^{2 \times 64}$$
+
+- **Multi-Head Scaled Dot-Product Attention ($h=4$ heads, key dimension $d_k=16$)**:
+  $$\text{head}_i = \text{Softmax}\left( \frac{(\mathbf{Z}^{(0)} W_i^Q)(\mathbf{Z}^{(0)} W_i^K)^T}{\sqrt{d_k}} \right) (\mathbf{Z}^{(0)} W_i^V), \quad W_i^Q, W_i^K, W_i^V \in \mathbb{R}^{64 \times 16}$$
+
+- **Residual Blocks, LayerNorm, and Feed-Forward Network**:
+  $$\mathbf{Z}^{(1)} = \text{LayerNorm}\left( \mathbf{Z}^{(0)} + [\text{head}_1 \mathbin{\Vert} \text{head}_2 \mathbin{\Vert} \text{head}_3 \mathbin{\Vert} \text{head}_4] W^O \right), \quad W^O \in \mathbb{R}^{64 \times 64}$$
   $$\mathbf{Z}^{(2)} = \text{LayerNorm}\left( \mathbf{Z}^{(1)} + \text{FFN}(\mathbf{Z}^{(1)}) \right)$$
-  $$h_{\text{fused}} = \frac{1}{2} \left( \mathbf{Z}^{(2)}_1 + \mathbf{Z}^{(2)}_2 \right) \in \mathbb{R}^{64}$$
+  where $\text{FFN}(\mathbf{z}) = W_{f2} \text{ReLU}(W_{f1} \mathbf{z} + b_{f1}) + b_{f2}$ with $W_{f1} \in \mathbb{R}^{128 \times 64}$ and $W_{f2} \in \mathbb{R}^{64 \times 128}$.
+
+- **Fused Patient Representation**:
+  Aggregated across modality tokens via mean pooling:
+  $$\mathbf{h}_{\text{fused}} = \frac{1}{2} \left( \mathbf{Z}^{(2)}_1 + \mathbf{Z}^{(2)}_2 \right) \in \mathbb{R}^{64}$$
 
 ### 3.4 Stage 4: Relational Graph Convolutional Network (GCN)
 
-For patients $u, v$ admitted to hospital $\mathcal{H}_j$:
+For patient cohort encounters $u, v$ admitted to hospital $\mathcal{H}_j$:
 
-- **Pairwise Cosine Similarity**: $S_{u, v} = \frac{h_{\text{fused}}(u) \cdot h_{\text{fused}}(v)}{\|h_{\text{fused}}(u)\|_2 \|h_{\text{fused}}(v)\|_2}$
+- **Pairwise Cosine Similarity**:
+  $$S_{u, v} = \frac{\mathbf{h}_{\text{fused}}(u) \cdot \mathbf{h}_{\text{fused}}(v)}{\|\mathbf{h}_{\text{fused}}(u)\|_2 \|\mathbf{h}_{\text{fused}}(v)\|_2}$$
+
 - **Hospital-Restricted $k$-NN Graph ($k=5$)**:
-  $$A_{u, v} = \begin{cases} S_{u, v} & \text{if } v \in \text{top-}k(S_{u, \cdot}) \text{ and } u, v \in \mathcal{H}_j \\ 0 & \text{otherwise} \end{cases}$$
-- **Symmetric Kipf-Welling Renormalization**:
+  $$A_{u, v} = \begin{cases} S_{u, v} & \text{if } v \in \text{top-}k(S_{u, :}) \text{ and } u, v \in \mathcal{H}_j \\ 0 & \text{otherwise} \end{cases}$$
+
+- **Symmetric Kipf & Welling Renormalization with Self-Loops**:
   $$\tilde{A} = \frac{A + A^T}{2} + I_N, \quad \tilde{D}_{u, u} = \sum_{v=1}^N \tilde{A}_{u, v}, \quad \tilde{A}_{\text{norm}} = \tilde{D}^{-1/2} \tilde{A} \tilde{D}^{-1/2}$$
+
 - **2-Layer Graph Convolution**:
-  $$H^{(1)} = \text{ReLU}\left( \tilde{A}_{\text{norm}} h_{\text{fused}} W^{(1)} \right), \quad W^{(1)} \in \mathbb{R}^{64 \times 128}$$
-  $$H_{\text{graph}} = \text{ReLU}\left( \tilde{A}_{\text{norm}} \text{Dropout}_{0.25}(H^{(1)}) W^{(2)} \right), \quad W^{(2)} \in \mathbb{R}^{128 \times 64}$$
+  Operating on the patient node matrix $\mathbf{H}^{(0)} = \mathbf{H}_{\text{fused}} \in \mathbb{R}^{N \times 64}$:
+  $$\mathbf{H}^{(1)} = \text{ReLU}\left( \tilde{A}_{\text{norm}} \mathbf{H}^{(0)} W^{(1)} + \mathbf{1} b_1^T \right), \quad W^{(1)} \in \mathbb{R}^{64 \times 128}, \; b_1 \in \mathbb{R}^{128}$$
+  $$\mathbf{H}_{\text{graph}} = \text{ReLU}\left( \tilde{A}_{\text{norm}} \text{Dropout}_{0.25}(\mathbf{H}^{(1)}) W^{(2)} + \mathbf{1} b_2^T \right), \quad W^{(2)} \in \mathbb{R}^{128 \times 64}, \; b_2 \in \mathbb{R}^{64}$$
 
 ### 3.5 Stage 5: Dual Multi-Task Objective
 
-Prediction heads map graph latents to task-specific logits:
-$$\hat{y}_{\text{mort}} = W_{m2} \text{ReLU}(W_{m1} H_{\text{graph}} + b_{m1}) + b_{m2}$$
-$$\hat{y}_{\text{seps}} = W_{s2} \text{ReLU}(W_{s1} H_{\text{graph}} + b_{s1}) + b_{s2}$$
+Dedicated MLP heads map graph latents $\mathbf{h}_{\text{graph}}(u) \in \mathbb{R}^{64}$ for patient $u$ to task-specific logits:
+$$\hat{y}_{\text{mort}}(u) = W_{m2} \text{ReLU}(W_{m1} \mathbf{h}_{\text{graph}}(u) + b_{m1}) + b_{m2}$$
+$$\hat{y}_{\text{seps}}(u) = W_{s2} \text{ReLU}(W_{s1} \mathbf{h}_{\text{graph}}(u) + b_{s1}) + b_{s2}$$
+where $W_{m1}, W_{s1} \in \mathbb{R}^{32 \times 64}$, $b_{m1}, b_{s1} \in \mathbb{R}^{32}$, $W_{m2}, W_{s2} \in \mathbb{R}^{1 \times 32}$, and $b_{m2}, b_{s2} \in \mathbb{R}$.
 
-The composite loss balances task class imbalance and auxiliary reconstruction:
-$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{BCE}}( \hat{y}_{\text{mort}}, y_{\text{mort}}; w_{\text{mort}} ) + \lambda_{\text{seps}} \mathcal{L}_{\text{BCE}}( \hat{y}_{\text{seps}}, y_{\text{seps}}; w_{\text{seps}} ) + \lambda_{\text{recon}} \|\hat{x}_{\text{tab}} - x_{\text{tab}}\|^2_2$$
+The composite multi-task loss jointly optimizes clinical classification and auxiliary reconstruction:
+$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{BCE}}( \hat{y}_{\text{mort}}, y_{\text{mort}}; w_{\text{mort}} ) + \lambda_{\text{seps}} \mathcal{L}_{\text{BCE}}( \hat{y}_{\text{seps}}, y_{\text{seps}}; w_{\text{seps}} ) + \lambda_{\text{recon}} \mathcal{L}_{\text{MSE}}(\hat{\mathbf{x}}_{\text{tab}}, \mathbf{x}_{\text{tab}})$$
 
-Where:
-$$w_{\text{mort}} = \frac{N_{\text{neg, mort}}}{N_{\text{pos, mort}}} \approx 10.35, \quad w_{\text{seps}} = \frac{N_{\text{neg, seps}}}{N_{\text{pos, seps}}} \approx 5.04, \quad \lambda_{\text{seps}} = 1.0, \quad \lambda_{\text{recon}} = 0.1$$
+Where positive-class-weighted binary cross-entropy with logits is formulated as:
+$$\mathcal{L}_{\text{BCE}}(\hat{y}, y; w) = - \left[ w \cdot y \log \sigma(\hat{y}) + (1 - y) \log (1 - \sigma(\hat{y})) \right]$$
+
+and tabular feature reconstruction mean squared error is:
+$$\mathcal{L}_{\text{MSE}}(\hat{\mathbf{x}}_{\text{tab}}, \mathbf{x}_{\text{tab}}) = \frac{1}{67} \sum_{j=1}^{67} (\hat{x}_{\text{tab}, j} - x_{\text{tab}, j})^2$$
+
+Hyperparameters are derived directly from empirical training class ratios:
+$$w_{\text{mort}} = \frac{N_{\text{neg, mort}}}{N_{\text{pos, mort}}} = \frac{130,779}{12,640} \approx 10.35, \quad w_{\text{seps}} = \frac{N_{\text{neg, seps}}}{N_{\text{pos, seps}}} = \frac{119,660}{23,759} \approx 5.04$$
+$$\lambda_{\text{seps}} = 1.0, \quad \lambda_{\text{recon}} = 0.1$$
 
 ---
 
@@ -249,7 +280,7 @@ All models were evaluated on the held-out **unseen test split** (27,360 patients
 
 ### Key Experimental Insights
 
-1. **Multimodal Synergy**: Adding static tabular context to temporal signals drives an immediate $+7.42\%$ jump in mortality AUPRC (from $0.4551$ to $0.5293$).
+1. **Multimodal Synergy**: Adding static tabular context to temporal signals drives an immediate jump in mortality AUPRC (from $0.4590$ to $0.5293$, a $+7.03\%$ gain over the standalone temporal LSTM, and $+7.42\%$ over initial unregularized baselines).
 2. **Attention Fusion Superiority**: Cross-Attention achieved the highest test AUROC ($0.8793$) and $F_1$-score ($0.5044$) among all fusion strategies, effectively selecting whether to prioritize acute trajectory signals or chronic baseline vulnerability.
 3. **Sepsis State-of-the-Art**: The Multi-Task GNN achieved **$0.9129$ AUROC** and **$0.6364$ AUPRC**, successfully flagging **87.53% of all sepsis cases** on unseen hospitals ($F_2$-score = **0.7109**).
 4. **Clinical Sensitivity Calibration**: In ICU triage, False Negatives (unrecognized imminent mortality) carry fatal consequences. Unweighted $F_1$ optimization over $10:1$ imbalanced data forced the decision threshold to $\tau \approx 0.74$, dropping sensitivity below $50\%$. By calibrating the decision threshold to $\tau = 0.62$ on the validation set, test sensitivity increased to **$64.63\%$** (+156 additional deceased patients flagged, reducing False Negatives from 1,018 to 862) while preserving an **$89.11\%$ specificity**.
@@ -263,7 +294,7 @@ All diagnostic and interpretability figures are pre-generated and stored in `fig
 ### 7.1 Multi-Task End-to-End Evaluation Suite
 
 ![Multi-Task Evaluation](figures/multitask_evaluation_plots.png)
-_Figure 1: Comprehensive 6-panel evaluation on 27,360 held-out test patients across 31 unseen hospitals. (Top-Left) Multi-Task ROC curves: Sepsis AUROC = 0.9129, Mortality AUROC = 0.8712. (Top-Center) Precision-Recall curves: Sepsis AUPRC = 0.6364, Mortality AUPRC = 0.4744. (Top-Right) F1 / F2 threshold sweeps showing optimal clinical operating points ($\tau_{\text{mort}} = 0.62, \tau*{\text{seps}} = 0.49$). (Bottom-Left & Bottom-Center) Confusion matrices showing 87.53% sensitivity for Sepsis and 64.63% sensitivity for Mortality. (Bottom-Right) Cross-phase performance trajectory.*
+_Figure 1: Comprehensive 6-panel evaluation on 27,360 held-out test patients across 31 unseen hospitals. (Top-Left) Multi-Task ROC curves: Sepsis AUROC = 0.9129, Mortality AUROC = 0.8712. (Top-Center) Precision-Recall curves: Sepsis AUPRC = 0.6364, Mortality AUPRC = 0.4744. (Top-Right) F1 / F2 threshold sweeps showing optimal clinical operating points ($\tau_{\text{mort}} = 0.62, \tau_{\text{seps}} = 0.49$). (Bottom-Left & Bottom-Center) Confusion matrices showing 87.53% sensitivity for Sepsis and 64.63% sensitivity for Mortality. (Bottom-Right) Cross-phase performance trajectory._
 
 ---
 
@@ -538,6 +569,66 @@ Recommended notebooks:
 The implementation utilizes sparse tensor operations (`scipy.sparse` and `torch.sparse`) for graph construction and hospital-restricted batching, allowing all 200,826 patients to be processed efficiently within reasonable memory constraints.
 
 ---
+
+## 11. Medical AI Ethics & Clinical Disclaimer
+
+### 11.1 Clinical Decision Support Disclaimer
+
+> [!WARNING]
+> **Research and Decision Support Notice**:
+> This framework is developed strictly for **academic research and clinical decision support (CDS)** exploration. It is **not** an autonomous diagnostic or treatment device, nor does it possess FDA/CE regulatory clearance for independent medical decision-making. Output risk probabilities, classification thresholds, and graph-based phenotypic clusters are intended to assist board-certified critical care physicians, intensivists, and ICU nursing staff by reducing cognitive overload and prioritizing high-risk patients. All algorithmic outputs must be corroborated with independent physical examination, bedside clinical assessments, and institutional laboratory protocols prior to administering interventions.
+
+### 11.2 Data Privacy, Governance & HIPAA Compliance
+
+- **Dataset Governance**: The eICU Collaborative Research Database (v2.0) is maintained by the Laboratory for Computational Physiology at MIT and Philips Healthcare. All patient records in the database have been de-identified in strict adherence to Health Insurance Portability and Accountability Act (HIPAA) Safe Harbor standards.
+- **Access Protocol**: Access to the underlying eICU database requires credentialed access via PhysioNet, completion of human subjects research training (CITI Data or Specimens Only Research), and signing the official Data Use Agreement (DUA).
+- **Prohibition on Re-Identification**: In accordance with PhysioNet regulations, any attempt to re-identify patients, healthcare providers, or specific hospital institutions is strictly prohibited.
+
+### 11.3 Algorithmic Fairness & Generalizability Boundaries
+
+- **Zero-Shot External Generalization**: By validating models exclusively across 31 held-out hospitals unseen during training, this framework systematically protects against single-center practice-pattern overfitting.
+- **Population Disparities**: Users and evaluators should recognize that critical care demographics, comorbidity distributions, and local ICU staffing ratios vary significantly across geography and hospital tiers (e.g., academic medical centers vs. community facilities). Models should be recalibrated on local institutional cohorts prior to deployment.
+
+---
+
+## 12. Citation & References
+
+### 12.1 Project Citation
+
+If you utilize this framework, codebase, or methodology in your academic work, please cite:
+
+```bibtex
+@misc{singh_dwivedi_2026_multimodal_gnn,
+  author       = {Rudransh Pratap Singh and Aryan Dwivedi},
+  title        = {Multimodal Relational Graph Neural Network Framework for Mortality and Sepsis Prediction using eICU},
+  year         = {2026},
+  school       = {Indian Institute of Information Technology, Bhopal},
+  note         = {Supervised by Dr. Supriyo Mandal, Department of Computer Science and Engineering},
+  url          = {https://github.com/ryn379/Multimodal-Graph-Learning-Framework}
+}
+```
+
+### 12.2 Primary Literature References
+
+1. **B. E. Keuning et al.**, *"Mortality prediction models in the adult critically ill: A scoping review,"* *Acta Anaesthesiologica Scandinavica*, vol. 64, no. 4, pp. 424–442, 2020. [doi:10.1111/aas.13527](https://doi.org/10.1111/aas.13527).
+2. **H. Sun, M. Kang, H. Zhang, J. Jia, and Q. Wang**, *"Machine Learning for Predicting Mortality in Intensive Care Unit Patients: A Prognostic Performance Systematic Review and Meta-Analysis,"* *Nursing in Critical Care*, vol. 30, no. 6, art. no. e70206, 2025. [doi:10.1111/nicc.70206](https://doi.org/10.1111/nicc.70206).
+3. **T. J. Pollard et al.**, *"The eICU Collaborative Research Database, a freely available multi-center database for critical care research,"* *Scientific Data*, vol. 5, art. no. 180178, 2018. [doi:10.1038/sdata.2018.178](https://doi.org/10.1038/sdata.2018.178).
+4. **S. Hochreiter and J. Schmidhuber**, *"Long Short-Term Memory,"* *Neural Computation*, vol. 9, no. 8, pp. 1735–1780, 1997. [doi:10.1162/neco.1997.9.8.1735](https://doi.org/10.1162/neco.1997.9.8.1735).
+5. **K. Cho et al.**, *"Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation,"* in *Proceedings of EMNLP*, pp. 1724–1734, 2014. [doi:10.3115/v1/D14-1179](https://doi.org/10.3115/v1/D14-1179).
+6. **Z. Che, S. Purushotham, K. Cho, D. Sontag, and Y. Liu**, *"Recurrent Neural Networks for Multivariate Time Series with Missing Values,"* *Scientific Reports*, vol. 8, art. no. 6085, 2018. [doi:10.1038/s41598-018-24271-9](https://doi.org/10.1038/s41598-018-24271-9).
+7. **C. Wang, X. Yang, M. Sun, Y. Gu, J. Niu, and W. Zhang**, *"Multimodal fusion network for ICU patient outcome prediction,"* *Neural Networks*, vol. 180, art. no. 106672, 2024. [doi:10.1016/j.neunet.2024.106672](https://doi.org/10.1016/j.neunet.2024.106672).
+8. **Y. Wang and W. Li**, *"Integrating Multimodal EHR Data for Mortality Prediction in ICU Sepsis Patients,"* *Statistics in Medicine*, vol. 44, art. no. e70060, 2025. [doi:10.1002/sim.70060](https://doi.org/10.1002/sim.70060).
+9. **N. Nikravangolsefid et al.**, *"Machine learning for predicting mortality in adult critically ill patients with Sepsis: A systematic review,"* *Journal of Critical Care*, vol. 84, art. no. 154889, 2024. [doi:10.1016/j.jcrc.2024.154889](https://doi.org/10.1016/j.jcrc.2024.154889).
+10. **T. N. Kipf and M. Welling**, *"Semi-Supervised Classification with Graph Convolutional Networks,"* in *International Conference on Learning Representations (ICLR)*, 2017.
+11. **M. Ma, P. Sun, Y. Li, and W. Huo**, *"Predicting the risk of mortality in ICU patients based on dynamic graph attention network of patient similarity,"* *Mathematical Biosciences and Engineering*, vol. 20, no. 8, pp. 15326–15344, 2023. [doi:10.3934/mbe.2023685](https://doi.org/10.3934/mbe.2023685).
+12. **T. Cover and P. Hart**, *"Nearest neighbor pattern classification,"* *IEEE Transactions on Information Theory*, vol. 13, no. 1, pp. 21–27, 1967.
+13. **R. Caruana**, *"Multitask Learning,"* *Machine Learning*, vol. 28, no. 1, pp. 41–75, 1997.
+14. **M. Sokolova and G. Lapalme**, *"A systematic analysis of performance measures for classification tasks,"* *Information Processing & Management*, vol. 45, no. 4, pp. 427–437, 2009.
+15. **A. Paszke et al.**, *"PyTorch: An Imperative Style, High-Performance Deep Learning Library,"* in *Advances in Neural Information Processing Systems (NeurIPS)*, vol. 32, 2019.
+16. **A. Vaswani et al.**, *"Attention is All You Need,"* in *Advances in Neural Information Processing Systems (NeurIPS)*, vol. 30, 2017.
+17. **Q. Li, Z. Han, and X.-M. Wu**, *"Deeper Insights into Graph Convolutional Networks for Semi-Supervised Learning,"* in *Proceedings of the AAAI Conference on Artificial Intelligence*, vol. 32, no. 1, 2018. [doi:10.1609/aaai.v32i1.11604](https://doi.org/10.1609/aaai.v32i1.11604).
+18. **N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and R. Salakhutdinov**, *"Dropout: A Simple Way to Prevent Neural Networks from Overfitting,"* *Journal of Machine Learning Research*, vol. 15, pp. 1929–1958, 2014.
+19. **C. Elkan**, *"The foundations of cost-sensitive learning,"* in *Proceedings of the 17th International Joint Conference on Artificial Intelligence (IJCAI)*, pp. 973–978, 2001.
 
 ---
 
