@@ -5,7 +5,6 @@
 [![Hardware Acceleration](https://img.shields.io/badge/Hardware-Apple%20Silicon%20MPS%20%7C%20CUDA-green.svg)](https://developer.apple.com/metal/pytorch/)
 [![Dataset: eICU v2.0](https://img.shields.io/badge/Dataset-eICU%20v2.0%20%28200k%2B%20stays%29-orange.svg)](https://eicu-crd.mit.edu/)
 [![Zero Institutional Leakage](https://img.shields.io/badge/Validation-Hospital--Level%20Partitioning-success.svg)](#4-hospital-level-partitioning--leakage-prevention)
-[![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey.svg)](#11-medical-ai-ethics--clinical-disclaimer)
 
 An enterprise-grade, end-to-end deep learning framework for intensive care unit (ICU) clinical decision support, built upon the **eICU Collaborative Research Database (v2.0)**. This framework unifies high-rate physiological time series, high-dimensional static clinical baselines, and inter-patient institutional relational topology to jointly predict two critical, high-stakes clinical outcomes:
 
@@ -340,22 +339,6 @@ _Figure 1: Comprehensive 6-panel evaluation on 27,360 held-out test patients acr
 ```text
 Multimodal-Graph-Learning-Framework/             # Exhaustive technical reference & architecture notes
 ├── README.md                            # Primary project documentation & execution guide
-├── checkpoints/                         # Model weights, embeddings, and metric archives
-│   ├── lstm_temporal_encoder.pt         # Pre-trained Stage 1 Dual-Task LSTM
-│   ├── lstm_baseline_metrics.json       # Standalone LSTM test evaluation results
-│   ├── temporal_embeddings_{split}.npy  # 64-d temporal representations
-│   ├── tabular_embeddings_{split}.npz   # 64-d tabular latent representations
-│   └── fusion/
-│       ├── multitask/
-│       │   ├── multitask_pipeline.pt    # Complete trained multi-task model checkpoint
-│       │   ├── metrics.json             # Final test evaluation metrics
-│       │   ├── split_summary.json       # Split metadata, hospital IDs, and class weights
-│       │   ├── multitask_scaler.json    # Feature scaler parameters
-│       │   └── test_predictions.npz     # Blind test predictions, logits, and ground-truth
-│       ├── attention_baseline/          # Stage 3 Attention Fusion weights & metrics
-│       ├── concat_baseline/             # Stage 3 Concatenation Fusion baseline
-│       ├── gated_baseline/              # Stage 3 Gated Fusion baseline
-│       └── patient_graphs_knn/          # Precomputed sparse intra-hospital k-NN graphs
 ├── figures/                             # Publication-quality diagnostic & evaluation plots
 │   ├── multitask_evaluation_plots.png
 │   ├── lstm_dual_task_evaluation.png
@@ -427,9 +410,9 @@ python3 -c "import torch; print('CUDA Available:', torch.cuda.is_available(), '|
 
 ---
 
-### 9.2 Reproducing Test Evaluation in 30 Seconds
+### 9.2 Running Test Evaluation & Diagnostic Generation
 
-Pre-trained checkpoints and cached test hospital tensors are included. You can reproduce the full evaluation suite and regenerate `figures/multitask_evaluation_plots.png` immediately:
+Once model training is complete (or after restoring checkpoints to the local `checkpoints/` directory), you can run the full evaluation suite and regenerate `figures/multitask_evaluation_plots.png`:
 
 ```bash
 python3 scripts/generate_multitask_evaluation.py
@@ -517,7 +500,6 @@ python3 scripts/train_eval_multitask_lstm.py
 Outputs:
 
 - `figures/lstm_dual_task_evaluation.png`
-- `checkpoints/lstm_baseline_metrics.json`
 
 ---
 
@@ -610,25 +592,25 @@ If you utilize this framework, codebase, or methodology in your academic work, p
 
 ### 12.2 Primary Literature References
 
-1. **B. E. Keuning et al.**, *"Mortality prediction models in the adult critically ill: A scoping review,"* *Acta Anaesthesiologica Scandinavica*, vol. 64, no. 4, pp. 424–442, 2020. [doi:10.1111/aas.13527](https://doi.org/10.1111/aas.13527).
-2. **H. Sun, M. Kang, H. Zhang, J. Jia, and Q. Wang**, *"Machine Learning for Predicting Mortality in Intensive Care Unit Patients: A Prognostic Performance Systematic Review and Meta-Analysis,"* *Nursing in Critical Care*, vol. 30, no. 6, art. no. e70206, 2025. [doi:10.1111/nicc.70206](https://doi.org/10.1111/nicc.70206).
-3. **T. J. Pollard et al.**, *"The eICU Collaborative Research Database, a freely available multi-center database for critical care research,"* *Scientific Data*, vol. 5, art. no. 180178, 2018. [doi:10.1038/sdata.2018.178](https://doi.org/10.1038/sdata.2018.178).
-4. **S. Hochreiter and J. Schmidhuber**, *"Long Short-Term Memory,"* *Neural Computation*, vol. 9, no. 8, pp. 1735–1780, 1997. [doi:10.1162/neco.1997.9.8.1735](https://doi.org/10.1162/neco.1997.9.8.1735).
-5. **K. Cho et al.**, *"Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation,"* in *Proceedings of EMNLP*, pp. 1724–1734, 2014. [doi:10.3115/v1/D14-1179](https://doi.org/10.3115/v1/D14-1179).
-6. **Z. Che, S. Purushotham, K. Cho, D. Sontag, and Y. Liu**, *"Recurrent Neural Networks for Multivariate Time Series with Missing Values,"* *Scientific Reports*, vol. 8, art. no. 6085, 2018. [doi:10.1038/s41598-018-24271-9](https://doi.org/10.1038/s41598-018-24271-9).
-7. **C. Wang, X. Yang, M. Sun, Y. Gu, J. Niu, and W. Zhang**, *"Multimodal fusion network for ICU patient outcome prediction,"* *Neural Networks*, vol. 180, art. no. 106672, 2024. [doi:10.1016/j.neunet.2024.106672](https://doi.org/10.1016/j.neunet.2024.106672).
-8. **Y. Wang and W. Li**, *"Integrating Multimodal EHR Data for Mortality Prediction in ICU Sepsis Patients,"* *Statistics in Medicine*, vol. 44, art. no. e70060, 2025. [doi:10.1002/sim.70060](https://doi.org/10.1002/sim.70060).
-9. **N. Nikravangolsefid et al.**, *"Machine learning for predicting mortality in adult critically ill patients with Sepsis: A systematic review,"* *Journal of Critical Care*, vol. 84, art. no. 154889, 2024. [doi:10.1016/j.jcrc.2024.154889](https://doi.org/10.1016/j.jcrc.2024.154889).
-10. **T. N. Kipf and M. Welling**, *"Semi-Supervised Classification with Graph Convolutional Networks,"* in *International Conference on Learning Representations (ICLR)*, 2017.
-11. **M. Ma, P. Sun, Y. Li, and W. Huo**, *"Predicting the risk of mortality in ICU patients based on dynamic graph attention network of patient similarity,"* *Mathematical Biosciences and Engineering*, vol. 20, no. 8, pp. 15326–15344, 2023. [doi:10.3934/mbe.2023685](https://doi.org/10.3934/mbe.2023685).
-12. **T. Cover and P. Hart**, *"Nearest neighbor pattern classification,"* *IEEE Transactions on Information Theory*, vol. 13, no. 1, pp. 21–27, 1967.
-13. **R. Caruana**, *"Multitask Learning,"* *Machine Learning*, vol. 28, no. 1, pp. 41–75, 1997.
-14. **M. Sokolova and G. Lapalme**, *"A systematic analysis of performance measures for classification tasks,"* *Information Processing & Management*, vol. 45, no. 4, pp. 427–437, 2009.
-15. **A. Paszke et al.**, *"PyTorch: An Imperative Style, High-Performance Deep Learning Library,"* in *Advances in Neural Information Processing Systems (NeurIPS)*, vol. 32, 2019.
-16. **A. Vaswani et al.**, *"Attention is All You Need,"* in *Advances in Neural Information Processing Systems (NeurIPS)*, vol. 30, 2017.
-17. **Q. Li, Z. Han, and X.-M. Wu**, *"Deeper Insights into Graph Convolutional Networks for Semi-Supervised Learning,"* in *Proceedings of the AAAI Conference on Artificial Intelligence*, vol. 32, no. 1, 2018. [doi:10.1609/aaai.v32i1.11604](https://doi.org/10.1609/aaai.v32i1.11604).
-18. **N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and R. Salakhutdinov**, *"Dropout: A Simple Way to Prevent Neural Networks from Overfitting,"* *Journal of Machine Learning Research*, vol. 15, pp. 1929–1958, 2014.
-19. **C. Elkan**, *"The foundations of cost-sensitive learning,"* in *Proceedings of the 17th International Joint Conference on Artificial Intelligence (IJCAI)*, pp. 973–978, 2001.
+1. **B. E. Keuning et al.**, _"Mortality prediction models in the adult critically ill: A scoping review,"_ _Acta Anaesthesiologica Scandinavica_, vol. 64, no. 4, pp. 424–442, 2020. [doi:10.1111/aas.13527](https://doi.org/10.1111/aas.13527).
+2. **H. Sun, M. Kang, H. Zhang, J. Jia, and Q. Wang**, _"Machine Learning for Predicting Mortality in Intensive Care Unit Patients: A Prognostic Performance Systematic Review and Meta-Analysis,"_ _Nursing in Critical Care_, vol. 30, no. 6, art. no. e70206, 2025. [doi:10.1111/nicc.70206](https://doi.org/10.1111/nicc.70206).
+3. **T. J. Pollard et al.**, _"The eICU Collaborative Research Database, a freely available multi-center database for critical care research,"_ _Scientific Data_, vol. 5, art. no. 180178, 2018. [doi:10.1038/sdata.2018.178](https://doi.org/10.1038/sdata.2018.178).
+4. **S. Hochreiter and J. Schmidhuber**, _"Long Short-Term Memory,"_ _Neural Computation_, vol. 9, no. 8, pp. 1735–1780, 1997. [doi:10.1162/neco.1997.9.8.1735](https://doi.org/10.1162/neco.1997.9.8.1735).
+5. **K. Cho et al.**, _"Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation,"_ in _Proceedings of EMNLP_, pp. 1724–1734, 2014. [doi:10.3115/v1/D14-1179](https://doi.org/10.3115/v1/D14-1179).
+6. **Z. Che, S. Purushotham, K. Cho, D. Sontag, and Y. Liu**, _"Recurrent Neural Networks for Multivariate Time Series with Missing Values,"_ _Scientific Reports_, vol. 8, art. no. 6085, 2018. [doi:10.1038/s41598-018-24271-9](https://doi.org/10.1038/s41598-018-24271-9).
+7. **C. Wang, X. Yang, M. Sun, Y. Gu, J. Niu, and W. Zhang**, _"Multimodal fusion network for ICU patient outcome prediction,"_ _Neural Networks_, vol. 180, art. no. 106672, 2024. [doi:10.1016/j.neunet.2024.106672](https://doi.org/10.1016/j.neunet.2024.106672).
+8. **Y. Wang and W. Li**, _"Integrating Multimodal EHR Data for Mortality Prediction in ICU Sepsis Patients,"_ _Statistics in Medicine_, vol. 44, art. no. e70060, 2025. [doi:10.1002/sim.70060](https://doi.org/10.1002/sim.70060).
+9. **N. Nikravangolsefid et al.**, _"Machine learning for predicting mortality in adult critically ill patients with Sepsis: A systematic review,"_ _Journal of Critical Care_, vol. 84, art. no. 154889, 2024. [doi:10.1016/j.jcrc.2024.154889](https://doi.org/10.1016/j.jcrc.2024.154889).
+10. **T. N. Kipf and M. Welling**, _"Semi-Supervised Classification with Graph Convolutional Networks,"_ in _International Conference on Learning Representations (ICLR)_, 2017.
+11. **M. Ma, P. Sun, Y. Li, and W. Huo**, _"Predicting the risk of mortality in ICU patients based on dynamic graph attention network of patient similarity,"_ _Mathematical Biosciences and Engineering_, vol. 20, no. 8, pp. 15326–15344, 2023. [doi:10.3934/mbe.2023685](https://doi.org/10.3934/mbe.2023685).
+12. **T. Cover and P. Hart**, _"Nearest neighbor pattern classification,"_ _IEEE Transactions on Information Theory_, vol. 13, no. 1, pp. 21–27, 1967.
+13. **R. Caruana**, _"Multitask Learning,"_ _Machine Learning_, vol. 28, no. 1, pp. 41–75, 1997.
+14. **M. Sokolova and G. Lapalme**, _"A systematic analysis of performance measures for classification tasks,"_ _Information Processing & Management_, vol. 45, no. 4, pp. 427–437, 2009.
+15. **A. Paszke et al.**, _"PyTorch: An Imperative Style, High-Performance Deep Learning Library,"_ in _Advances in Neural Information Processing Systems (NeurIPS)_, vol. 32, 2019.
+16. **A. Vaswani et al.**, _"Attention is All You Need,"_ in _Advances in Neural Information Processing Systems (NeurIPS)_, vol. 30, 2017.
+17. **Q. Li, Z. Han, and X.-M. Wu**, _"Deeper Insights into Graph Convolutional Networks for Semi-Supervised Learning,"_ in _Proceedings of the AAAI Conference on Artificial Intelligence_, vol. 32, no. 1, 2018. [doi:10.1609/aaai.v32i1.11604](https://doi.org/10.1609/aaai.v32i1.11604).
+18. **N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and R. Salakhutdinov**, _"Dropout: A Simple Way to Prevent Neural Networks from Overfitting,"_ _Journal of Machine Learning Research_, vol. 15, pp. 1929–1958, 2014.
+19. **C. Elkan**, _"The foundations of cost-sensitive learning,"_ in _Proceedings of the 17th International Joint Conference on Artificial Intelligence (IJCAI)_, pp. 973–978, 2001.
 
 ---
 
